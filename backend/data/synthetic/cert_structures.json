@@ -1,0 +1,146 @@
+{
+  "AZ-204": {
+    "cert_id": "AZ-204",
+    "cert_name": "Developing Solutions for Microsoft Azure",
+    "role": "Cloud Engineer",
+    "recommended_study_hours": 20,
+    "passing_score": 700,
+    "domains": [
+      {
+        "domain_id": "D1",
+        "name": "Develop Azure compute solutions",
+        "weight_pct": 25,
+        "services": ["Azure Functions", "Azure App Service", "Azure Container Instances", "Azure Container Apps"]
+      },
+      {
+        "domain_id": "D2",
+        "name": "Develop for Azure storage",
+        "weight_pct": 15,
+        "services": ["Azure Blob Storage", "Azure Cosmos DB", "Azure Table Storage", "Azure Queue Storage"]
+      },
+      {
+        "domain_id": "D3",
+        "name": "Implement Azure security",
+        "weight_pct": 20,
+        "services": ["Azure Key Vault", "Azure Active Directory", "Managed Identity", "RBAC"]
+      },
+      {
+        "domain_id": "D4",
+        "name": "Monitor, troubleshoot, and optimize Azure solutions",
+        "weight_pct": 15,
+        "services": ["Azure Monitor", "Application Insights", "Log Analytics", "Azure Cache for Redis"]
+      },
+      {
+        "domain_id": "D5",
+        "name": "Connect to and consume Azure services and third-party services",
+        "weight_pct": 25,
+        "services": ["Azure API Management", "Azure Event Grid", "Azure Service Bus", "Azure Event Hub"]
+      }
+    ]
+  },
+  "AZ-400": {
+    "cert_id": "AZ-400",
+    "cert_name": "Designing and Implementing Microsoft DevOps Solutions",
+    "role": "DevOps Engineer",
+    "recommended_study_hours": 25,
+    "passing_score": 700,
+    "domains": [
+      {
+        "domain_id": "D1",
+        "name": "Configure processes and communications",
+        "weight_pct": 10,
+        "services": ["Azure Boards", "GitHub Issues", "Agile tools"]
+      },
+      {
+        "domain_id": "D2",
+        "name": "Design and implement source control",
+        "weight_pct": 15,
+        "services": ["Azure Repos", "GitHub", "Git branching strategies"]
+      },
+      {
+        "domain_id": "D3",
+        "name": "Design and implement build and release pipelines",
+        "weight_pct": 40,
+        "services": ["Azure Pipelines", "GitHub Actions", "Azure Artifacts", "Deployment strategies"]
+      },
+      {
+        "domain_id": "D4",
+        "name": "Develop a security and compliance plan",
+        "weight_pct": 20,
+        "services": ["Azure Security Center", "Dependency scanning", "Secret management", "SAST"]
+      },
+      {
+        "domain_id": "D5",
+        "name": "Implement an instrumentation strategy",
+        "weight_pct": 15,
+        "services": ["Azure Monitor", "Application Insights", "Log Analytics", "Alerting"]
+      }
+    ]
+  },
+  "DP-203": {
+    "cert_id": "DP-203",
+    "cert_name": "Data Engineering on Microsoft Azure",
+    "role": "Data Engineer",
+    "recommended_study_hours": 22,
+    "passing_score": 700,
+    "domains": [
+      {
+        "domain_id": "D1",
+        "name": "Design and implement data storage",
+        "weight_pct": 40,
+        "services": ["Azure Data Lake Gen2", "Azure Synapse Analytics", "Azure Blob Storage", "Azure SQL Database"]
+      },
+      {
+        "domain_id": "D2",
+        "name": "Design and develop data processing",
+        "weight_pct": 25,
+        "services": ["Azure Databricks", "Azure Data Factory", "Azure Stream Analytics", "Azure Synapse Pipelines"]
+      },
+      {
+        "domain_id": "D3",
+        "name": "Design and implement data security",
+        "weight_pct": 20,
+        "services": ["RBAC", "Column-level security", "Row-level security", "Azure Purview"]
+      },
+      {
+        "domain_id": "D4",
+        "name": "Monitor and optimize data storage and data processing",
+        "weight_pct": 15,
+        "services": ["Azure Monitor", "Query optimization", "Cost management", "Scaling strategies"]
+      }
+    ]
+  },
+  "AZ-305": {
+    "cert_id": "AZ-305",
+    "cert_name": "Designing Microsoft Azure Infrastructure Solutions",
+    "role": "Cloud Architect",
+    "recommended_study_hours": 30,
+    "passing_score": 700,
+    "domains": [
+      {
+        "domain_id": "D1",
+        "name": "Design identity, governance, and monitoring solutions",
+        "weight_pct": 25,
+        "services": ["Azure AD", "Azure Policy", "Azure Monitor", "Management Groups"]
+      },
+      {
+        "domain_id": "D2",
+        "name": "Design data storage solutions",
+        "weight_pct": 25,
+        "services": ["Azure SQL", "Azure Cosmos DB", "Azure Storage", "Azure Data Lake"]
+      },
+      {
+        "domain_id": "D3",
+        "name": "Design business continuity solutions",
+        "weight_pct": 15,
+        "services": ["Azure Site Recovery", "Azure Backup", "Traffic Manager", "Geo-redundancy"]
+      },
+      {
+        "domain_id": "D4",
+        "name": "Design infrastructure solutions",
+        "weight_pct": 35,
+        "services": ["Azure Virtual Network", "Azure Kubernetes Service", "Azure App Service", "Azure Load Balancer"]
+      }
+    ]
+  }
+}

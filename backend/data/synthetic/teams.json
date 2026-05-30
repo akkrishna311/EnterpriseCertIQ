@@ -1,0 +1,18 @@
+[
+  {
+    "team_id": "TEAM-A",
+    "team_name": "Platform Engineering",
+    "manager_id": "MGR-001",
+    "members": ["L-1004", "L-1005", "L-1007"],
+    "cert_targets": ["AZ-204", "AZ-400"],
+    "quarter_goal": "All members hold at least one Azure certification by Q3 2026"
+  },
+  {
+    "team_id": "TEAM-B",
+    "team_name": "Data & Architecture",
+    "manager_id": "MGR-002",
+    "members": ["L-1006", "L-1008"],
+    "cert_targets": ["DP-203", "AZ-305"],
+    "quarter_goal": "Upskill data engineers on Azure Data platform; architect to achieve AZ-305"
+  }
+]

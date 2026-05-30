@@ -1,0 +1,126 @@
+[
+  {
+    "learner_id": "L-1004",
+    "display_name": "Learner-Alpha",
+    "role": "Cloud Engineer",
+    "team_id": "TEAM-A",
+    "cert_target": "AZ-204",
+    "deadline": "2026-08-15",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 22,
+      "focus_hours_per_week": 10,
+      "preferred_learning_slot": "Morning",
+      "upcoming_milestones": ["sprint_review_2026-07-10"],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": {
+      "compute": 0.72,
+      "networking": 0.41,
+      "storage": 0.68,
+      "security": 0.55,
+      "monitoring": 0.60,
+      "cicd": 0.50,
+      "data": 0.45
+    }
+  },
+  {
+    "learner_id": "L-1005",
+    "display_name": "Learner-Beta",
+    "role": "DevOps Engineer",
+    "team_id": "TEAM-A",
+    "cert_target": "AZ-400",
+    "deadline": "2026-08-01",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 28,
+      "focus_hours_per_week": 8,
+      "preferred_learning_slot": "Afternoon",
+      "upcoming_milestones": ["release_2026-07-20", "oncall_rotation_2026-07-14"],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": {
+      "compute": 0.65,
+      "networking": 0.70,
+      "storage": 0.55,
+      "security": 0.60,
+      "monitoring": 0.78,
+      "cicd": 0.82,
+      "data": 0.40
+    }
+  },
+  {
+    "learner_id": "L-1006",
+    "display_name": "Learner-Gamma",
+    "role": "Data Engineer",
+    "team_id": "TEAM-B",
+    "cert_target": "DP-203",
+    "deadline": "2026-09-01",
+    "prior_attempts": [
+      {
+        "date": "2026-03-10",
+        "score": 640,
+        "outcome": "Fail",
+        "weak_areas": ["data_integration", "data_storage"]
+      }
+    ],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 15,
+      "focus_hours_per_week": 18,
+      "preferred_learning_slot": "Morning",
+      "upcoming_milestones": [],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": {
+      "compute": 0.50,
+      "networking": 0.45,
+      "storage": 0.38,
+      "security": 0.55,
+      "monitoring": 0.60,
+      "cicd": 0.48,
+      "data": 0.35
+    }
+  },
+  {
+    "learner_id": "L-1007",
+    "display_name": "Learner-Delta",
+    "role": "Cloud Engineer",
+    "team_id": "TEAM-A",
+    "cert_target": "AZ-204",
+    "deadline": "2026-08-15",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 12,
+      "focus_hours_per_week": 6,
+      "preferred_learning_slot": "Evening",
+      "upcoming_milestones": [],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": null
+  },
+  {
+    "learner_id": "L-1008",
+    "display_name": "Learner-Epsilon",
+    "role": "Cloud Architect",
+    "team_id": "TEAM-B",
+    "cert_target": "AZ-305",
+    "deadline": "2026-10-01",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 18,
+      "focus_hours_per_week": 14,
+      "preferred_learning_slot": "Morning",
+      "upcoming_milestones": ["quarterly_review_2026-09-15"],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": {
+      "compute": 0.80,
+      "networking": 0.75,
+      "storage": 0.70,
+      "security": 0.68,
+      "monitoring": 0.72,
+      "cicd": 0.65,
+      "data": 0.60
+    }
+  }
+]

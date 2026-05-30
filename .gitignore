@@ -1,0 +1,38 @@
+# Environment — never commit secrets
+.env
+.env.local
+.env.azure
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local storage (dev data)
+backend/data/store/
+
+# Runtime artifacts
+.running_pids
+*.log
+
+# IDE
+.vscode/settings.json
+.idea/
+*.DS_Store
+
+# Foundry Local model cache
+.foundry/
+
+# Azure Developer CLI
+.azure/
