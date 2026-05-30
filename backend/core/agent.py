@@ -45,6 +45,7 @@ class BaseAgent:
         model_role: str = "default",
         temperature: float = 0.3,
         max_tool_rounds: int = 5,
+        max_tokens: int = 2048,
         on_event: Optional[Callable[[TraceEvent], None]] = None,
     ):
         self.name = name
@@ -54,6 +55,7 @@ class BaseAgent:
         self.model_role = model_role
         self.temperature = temperature
         self.max_tool_rounds = max_tool_rounds
+        self.max_tokens = max_tokens
         self.on_event = on_event
         self._tool_executors: dict[str, Callable] = {}
 
@@ -173,6 +175,10 @@ class BaseAgent:
                     "model": model,
                     "messages": chat_messages,
                     "temperature": self.temperature,
+                    # Cap output length. Without this, some local models (e.g.
+                    # qwen) can run away generating thousands of tokens for a
+                    # structured response, stalling the workflow for minutes.
+                    "max_tokens": self.max_tokens,
                 }
                 if self.tools:
                     kwargs["tools"] = self.tools

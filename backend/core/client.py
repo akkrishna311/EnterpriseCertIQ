@@ -172,13 +172,15 @@ def get_model_name(role: str = "default") -> str:
     return s.active_model
 
 
+@lru_cache(maxsize=8)
 def ensure_model_loaded(role: str = "default") -> None:
-    """Ensure the Foundry Local model for `role` is loaded before use.
+    """Ensure the Foundry Local model for `role` is loaded — once per process.
 
-    Foundry Local can evict an idle model to reclaim memory. The Critic runs
-    on the reasoning model several stages into a workflow, by which point it
-    may have been unloaded — producing a 400 "model not loaded". This loads it
-    on demand (idempotent + cheap when already resident). No-op on Azure.
+    The model is normally loaded by the `setup_foundry.py --serve` manager that
+    backs the :5273 endpoint. This is a best-effort safety net for the case
+    where it isn't. Cached per role so it runs at most once per model per
+    process — the SDK's `is_loaded` is unreliable, so without caching this could
+    trigger a redundant (slow) reload on every agent call. No-op on Azure.
     """
     s = get_settings()
     if s.model_backend != ModelBackend.FOUNDRY_LOCAL:
