@@ -58,6 +58,7 @@ export default function LearnerView() {
   const [planApproved, setPlanApproved] = useState(false)
   const [objections, setObjections] = useState<any[]>([])
   const [progressSeries, setProgressSeries] = useState<any[]>([])
+  const [readiness, setReadiness] = useState<any>()
   const [assessment, setAssessment] = useState<any>(null)
   const [difficulty, setDifficulty] = useState<Difficulty>('Mixed')
   const [generating, setGenerating] = useState(false)
@@ -82,7 +83,7 @@ export default function LearnerView() {
   async function handleRun() {
     if (!learner) return
     setRunning(true)
-    setEvents([]); setObjections([]); setProgressSeries([])
+    setEvents([]); setObjections([]); setProgressSeries([]); setReadiness(undefined)
     setPlanId(undefined); setPlanData(undefined); setPlanApproved(false)
     setActiveTab('reasoning')
 
@@ -108,6 +109,9 @@ export default function LearnerView() {
         }
         if (eventType === 'tool_result' && evt.data?.tool === 'compute_progress_series') {
           setProgressSeries(evt.data?.result?.series ?? [])
+        }
+        if (eventType === 'readiness_advance' || eventType === 'readiness_loopback') {
+          setReadiness({ kind: eventType, ...evt.data })
         }
         if (eventType === 'workflow_error') {
           setEvents((prev) => [...prev, {
@@ -188,7 +192,7 @@ export default function LearnerView() {
               setSelectedLearner(e.target.value)
               setEvents([]); setRunId(undefined); setPlanData(undefined)
               setPlanId(undefined); setPlanApproved(false); setObjections([])
-              setProgressSeries([]); setAssessment(null); setExamResult(null)
+              setProgressSeries([]); setAssessment(null); setExamResult(null); setReadiness(undefined)
             }}
             className="w-full text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
           >
@@ -317,7 +321,24 @@ export default function LearnerView() {
           )}
 
           {activeTab === 'readiness' && (
-            <div className="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="mt-3 space-y-4">
+            {readiness && (
+              <div className={`rounded-lg border p-4 ${
+                readiness.kind === 'readiness_advance'
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-amber-50 border-amber-300'
+              }`}>
+                <div className="flex items-center gap-2 text-sm font-semibold mb-1">
+                  <Target size={15} className={readiness.kind === 'readiness_advance' ? 'text-green-700' : 'text-amber-700'} />
+                  <span className={readiness.kind === 'readiness_advance' ? 'text-green-800' : 'text-amber-800'}>
+                    Assessment Agent verdict: {readiness.verdict === 'ready' ? 'READY — advance' : readiness.verdict === 'not_ready' ? 'NOT READY — loop back to prep' : 'Insufficient evidence'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-700">{readiness.message}</p>
+                {readiness.next_step && <p className="text-xs text-gray-600 mt-1"><strong>Next step:</strong> {readiness.next_step}</p>}
+              </div>
+            )}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div className="bg-white rounded-lg border border-gray-200 p-4">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Pass-Threshold Forecast</h3>
                 {forecast ? <PassThresholdGauge forecast={forecast} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
@@ -330,6 +351,7 @@ export default function LearnerView() {
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Service-Level Heatmap</h3>
                 {mastery ? <ServiceHeatmap domains={mastery.domains} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
               </div>
+            </div>
             </div>
           )}
 

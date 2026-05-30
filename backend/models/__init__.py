@@ -7,6 +7,8 @@ from .agent_outputs import (
     EngagementOutput,
     ManagerInsightsOutput,
     PeerLearningPair,
+    AssessmentOutput,
+    SampleQuestion,
 )
 from .plan import StudyPlan, StudyWeek, StudyTopic, PlanStatus
 from .assessment import Assessment, Question, ReadinessForecast
@@ -18,6 +20,7 @@ __all__ = [
     "CuratedTopic", "CuratedTopicList",
     "CriticObjectionOutput", "CriticOutput",
     "EngagementOutput", "ManagerInsightsOutput", "PeerLearningPair",
+    "AssessmentOutput", "SampleQuestion",
     "StudyPlan", "StudyWeek", "StudyTopic", "PlanStatus",
     "Assessment", "Question", "ReadinessForecast",
     "MasteryGrid", "DomainMastery", "ServiceCell", "ServiceHeatmap",

@@ -13,6 +13,7 @@ from backend.core.client import model_supports_tools
 from backend.core.mcp_client import get_learn_mcp_client, get_own_mcp_client
 from backend.iq.foundry_iq import get_foundry_iq
 from backend.models import (
+    AssessmentOutput,
     CriticOutput,
     CuratedTopicList,
     EngagementOutput,
@@ -350,6 +351,16 @@ def build_agents(on_event=None) -> dict:
         temperature=0.1,
         response_format=ManagerInsightsOutput,
     )
+    # Assessment Agent: grounded cited questions + calibrated readiness verdict.
+    # Tools: foundry_iq_search (ground next-step), generate_assessment, compute_readiness_forecast.
+    assessment = make_agent(
+        "assessment",
+        "assessment",
+        [_OWN_TOOLS[1], _OWN_TOOLS[4], _OWN_TOOLS[5]],
+        temperature=0.1,
+        response_format=AssessmentOutput,
+        max_tool_rounds=3,
+    )
     retro = make_agent("retrospective", "retrospective", _OWN_TOOLS[:3])
 
     return {
@@ -359,5 +370,6 @@ def build_agents(on_event=None) -> dict:
         "critic": critic,
         "engagement": engagement,
         "manager": manager,
+        "assessment": assessment,
         "retrospective": retro,
     }

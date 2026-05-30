@@ -17,6 +17,8 @@ class TraceEventType(str, Enum):
     HITL_REQUEST = "hitl_request"
     HITL_APPROVED = "hitl_approved"
     HITL_REJECTED = "hitl_rejected"
+    READINESS_LOOPBACK = "readiness_loopback"   # Assessment failed → loop back to prep
+    READINESS_ADVANCE = "readiness_advance"     # Assessment passed → recommend next cert
     ERROR = "error"
 
 

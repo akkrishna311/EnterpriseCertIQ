@@ -173,6 +173,7 @@ async def run_workflow(req: RunWorkflowRequest):
         critic_agent=agents["critic"],
         engagement_agent=agents["engagement"],
         manager_agent=agents["manager"],
+        assessment_agent=agents["assessment"],
         retrospective_agent=agents["retrospective"],
         storage=storage,
     )

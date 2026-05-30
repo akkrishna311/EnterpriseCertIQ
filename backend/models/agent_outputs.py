@@ -127,3 +127,30 @@ class ManagerInsightsOutput(BaseModel):
     peer_learning_pairs: list[PeerLearningPair] = Field(default_factory=list)
     manager_actions: list[str] = Field(default_factory=list)
     ai_disclosure: str = "AI-generated team insights; verify before use in performance decisions"
+
+
+class SampleQuestion(BaseModel):
+    """A grounded, cited practice question surfaced by the Assessment Agent."""
+    question_text: str = ""
+    domain: str = ""
+    citation: str = ""  # source title + span/excerpt the question is grounded in
+
+
+class AssessmentOutput(BaseModel):
+    """Readiness evaluation from the Assessment Agent.
+
+    Drives the workflow's pass/fail loop-back: `recommendation` decides whether
+    the learner advances to the next certification or loops back into prep.
+    """
+    learner_id: str = ""
+    cert_id: str = ""
+    readiness_verdict: Literal["ready", "not_ready", "insufficient_evidence"] = "not_ready"
+    pass_probability: float = Field(default=0.0, ge=0.0, le=1.0)
+    estimated_exam_score: int = 0
+    pass_threshold: int = 700
+    weak_areas: list[str] = Field(default_factory=list)
+    sample_questions: list[SampleQuestion] = Field(default_factory=list)
+    recommendation: Literal["advance", "remediate", "gather_evidence"] = "remediate"
+    next_step: str = ""  # e.g. "Recommend AZ-305 as the next certification"
+    rationale: str = ""
+    ai_disclosure: str = "AI-generated readiness assessment; not an official exam result"

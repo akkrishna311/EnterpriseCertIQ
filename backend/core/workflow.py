@@ -18,7 +18,15 @@ from typing import Callable, Optional
 from backend.core.telemetry import workflow_span
 from backend.models.learner import LearnerProfile
 from backend.models.trace import ReasoningTrace, TraceEvent, TraceEventType
-from backend.mcp_server.server import StudyPlanInput, generate_study_plan
+from backend.mcp_server.server import (
+    StudyPlanInput,
+    generate_study_plan,
+    ForecastInput,
+    compute_readiness_forecast,
+)
+
+# Fallback next-certification map (used if the Assessment Agent doesn't ground one).
+_NEXT_CERT = {"AZ-204": "AZ-305", "AZ-400": "AZ-500", "DP-203": "DP-300", "AZ-305": "AZ-400"}
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +82,27 @@ async def _canonicalize_plan_payload(learner: LearnerProfile, curated_topics, ca
     return canonical_plan, True
 
 
+def _readiness_from_forecast(forecast) -> dict:
+    """Deterministic readiness decision from the calibrated forecast.
+
+    Kept separate from the LLM verdict so the workflow's advance/loop-back
+    control flow is reliable, not subject to model variance.
+    """
+    if not isinstance(forecast, dict) or forecast.get("insufficient_evidence"):
+        return {"recommendation": "gather_evidence", "verdict": "insufficient_evidence",
+                "estimated_exam_score": 0,
+                "pass_threshold": (forecast or {}).get("pass_threshold", 700),
+                "weakest_topic": ""}
+    est = forecast.get("estimated_exam_score", 0)
+    thr = forecast.get("pass_threshold", 700)
+    ready = est >= thr
+    return {"recommendation": "advance" if ready else "remediate",
+            "verdict": "ready" if ready else "not_ready",
+            "estimated_exam_score": est, "pass_threshold": thr,
+            "pass_probability": forecast.get("pass_probability", 0.0),
+            "weakest_topic": forecast.get("weakest_topic", "")}
+
+
 class WorkflowContext:
     def __init__(self, learner: LearnerProfile, run_id: str):
         self.learner = learner
@@ -104,6 +133,7 @@ class WorkflowOrchestrator:
         critic_agent,
         engagement_agent,
         manager_agent,
+        assessment_agent=None,
         retrospective_agent=None,
         storage=None,
         max_critique_rounds: int = 2,
@@ -114,6 +144,7 @@ class WorkflowOrchestrator:
         self.critic = critic_agent
         self.engagement = engagement_agent
         self.manager = manager_agent
+        self.assessment = assessment_agent
         self.retrospective = retrospective_agent
         self.storage = storage
         self.max_critique_rounds = max_critique_rounds
@@ -136,7 +167,7 @@ class WorkflowOrchestrator:
         # into the persisted trace too — not just the live SSE stream — so the
         # full reasoning trace survives a page reload / trace replay.
         for agent in (self.intake, self.curator, self.planner, self.critic,
-                      self.engagement, self.manager, self.retrospective):
+                      self.engagement, self.manager, self.assessment, self.retrospective):
             if agent is not None:
                 agent.on_event = emit
 
@@ -295,7 +326,107 @@ class WorkflowOrchestrator:
             ctx.set_output("engagement", engagement_result)
             engagement_payload = _structured_payload(engagement_result)
 
-            # ── Stage 6: Manager Insights ──────────────────────────────────
+            # ── Stage 6: Assessment Agent → readiness verdict + loop-back ───
+            # Authoritative readiness comes from the calibrated forecast; the
+            # Assessment Agent adds grounded cited questions + a narrative verdict.
+            evidence = (
+                learner.prior_assessment_evidence.model_dump()
+                if learner.prior_assessment_evidence else {}
+            )
+            forecast = await compute_readiness_forecast.fn(ForecastInput(
+                learner_id=learner.learner_id,
+                cert_id=learner.cert_target,
+                plan_id=draft_plan_id or "draft",
+                evidence_json=json.dumps(evidence),
+            ))
+
+            if self.assessment:
+                assessment_result = await self.assessment.run(
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"Learner: {learner.model_dump_json()}\n\n"
+                            f"Calibrated readiness forecast:\n{_as_text(forecast)}\n\n"
+                            f"Study plan:\n{_as_text(critique_history[-1])[:600]}\n\n"
+                            "Generate grounded, cited practice questions; evaluate readiness; "
+                            "and recommend advance / remediate / gather_evidence. Ground the "
+                            "next-step certification recommendation with foundry_iq_search. "
+                            "Return the AssessmentOutput JSON."
+                        )
+                    }],
+                    run_id=run_id,
+                )
+                ctx.set_output("assessment", assessment_result)
+                assessment_payload = _structured_payload(assessment_result)
+            else:
+                assessment_payload = None
+
+            decision = _readiness_from_forecast(forecast)
+            ctx.set_output("readiness_decision", decision)
+
+            if decision["recommendation"] == "advance":
+                next_step = ""
+                if isinstance(assessment_payload, dict):
+                    next_step = assessment_payload.get("next_step", "")
+                if not next_step:
+                    nxt = _NEXT_CERT.get(learner.cert_target, "")
+                    next_step = (f"Recommend {nxt} as the next certification."
+                                 if nxt else "Recommend an advanced certification next.")
+                emit(make_event(TraceEventType.READINESS_ADVANCE, "assessment", {
+                    "verdict": "ready",
+                    "estimated_exam_score": decision["estimated_exam_score"],
+                    "pass_threshold": decision["pass_threshold"],
+                    "next_step": next_step,
+                    "message": (
+                        f"Readiness met ({decision['estimated_exam_score']}/"
+                        f"{decision['pass_threshold']}). {next_step}"
+                    ),
+                }))
+            elif decision["recommendation"] == "remediate":
+                weak = decision.get("weakest_topic", "") or "the weakest domain"
+                emit(make_event(TraceEventType.READINESS_LOOPBACK, "assessment", {
+                    "verdict": "not_ready",
+                    "estimated_exam_score": decision["estimated_exam_score"],
+                    "pass_threshold": decision["pass_threshold"],
+                    "weak_area": weak,
+                    "message": (
+                        f"Below threshold ({decision['estimated_exam_score']}/"
+                        f"{decision['pass_threshold']}). Looping back to strengthen: {weak}."
+                    ),
+                }))
+                # Bounded loop-back: one focused remediation re-plan on the weak area.
+                remediation = await self.planner.run(
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"The learner is NOT yet ready (weakest area: {weak}). Revise the "
+                            f"study plan to add focused remediation on '{weak}' before the exam.\n\n"
+                            f"Current plan:\n{_as_text(critique_history[-1])}"
+                        )
+                    }],
+                    run_id=run_id,
+                )
+                rem_payload, rem_synth = await _canonicalize_plan_payload(
+                    learner, curated_topics, _structured_payload(remediation),
+                )
+                if rem_synth:
+                    emit(make_event(TraceEventType.TOOL_RESULT, "plan_generator", {
+                        "tool": "generate_study_plan",
+                        "result_length": len(str(rem_payload)),
+                        "result": rem_payload, "synthesized": True, "remediation": True,
+                    }))
+                critique_history.append(rem_payload)
+                ctx.set_output("final_plan", critique_history[-1])
+            else:  # gather_evidence
+                emit(make_event(TraceEventType.READINESS_LOOPBACK, "assessment", {
+                    "verdict": "insufficient_evidence",
+                    "message": (
+                        "Insufficient evidence to forecast readiness — complete at least one "
+                        "assessment before advancing. Looping back to gather evidence."
+                    ),
+                }))
+
+            # ── Stage 7: Manager Insights ──────────────────────────────────
             manager_result = await self.manager.run(
                 messages=[{
                     "role": "user",
@@ -304,6 +435,8 @@ class WorkflowOrchestrator:
                         f"Learner summary:\n{intake_result.content}\n\n"
                         f"Plan summary:\n{_as_text(critique_history[-1])[:500]}\n\n"
                         f"Engagement:\n{_as_text(engagement_payload)}\n\n"
+                        f"Readiness decision: {decision['verdict']} "
+                        f"({decision['estimated_exam_score']}/{decision['pass_threshold']})\n\n"
                         "Produce manager-level insights: team readiness summary, "
                         "risk areas, peer-learning pairs. Never expose individual scores "
                         "that could affect employment decisions."
@@ -313,7 +446,7 @@ class WorkflowOrchestrator:
             )
             ctx.set_output("manager", manager_result)
 
-            # ── Stage 7: Retrospective (if prior failures exist) ───────────
+            # ── Stage 8: Retrospective (if prior failures exist) ───────────
             if learner.has_prior_failures and self.retrospective:
                 retro_result = await self.retrospective.run(
                     messages=[{

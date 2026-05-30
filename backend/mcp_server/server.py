@@ -298,11 +298,22 @@ async def generate_assessment(args: AssessmentInput) -> dict:
                 difficulty = args.difficulty.capitalize()
             else:
                 difficulty = ["Easy", "Medium", "Hard"][question_index % 3]
-            stem = QUESTION_STEMS[question_index % len(QUESTION_STEMS)].format(
+            base_stem = QUESTION_STEMS[question_index % len(QUESTION_STEMS)].format(
                 cert_id=args.cert_id,
                 domain=domain["name"],
                 service=service,
             )
+            # Ground the question in the actual retrieved excerpt so it is
+            # grounded in approved content, not just a bare template.
+            excerpt = (citation.get("excerpt") or "").strip()
+            excerpt_snippet = (excerpt[:160] + "…") if len(excerpt) > 160 else excerpt
+            if excerpt_snippet:
+                stem = (
+                    f"{base_stem}\n\nApproved source ({citation.get('title','Guide')}): "
+                    f"“{excerpt_snippet}”"
+                )
+            else:
+                stem = base_stem
             question_id = f"Q-{domain['domain_id']}-{i+1:03}"
             correct_option = f"Apply the recommended Microsoft pattern for {service}"
             options = [
@@ -324,8 +335,9 @@ async def generate_assessment(args: AssessmentInput) -> dict:
                 "options": options,
                 "correct_index": correct_index,
                 "explanation": (
-                    f"The correct option applies Microsoft guidance for {service}. "
-                    f"Source: {citation['title']}."
+                    f"Grounded in {citation.get('title','the approved guide')}"
+                    + (f": “{excerpt_snippet}”. " if excerpt_snippet else ". ")
+                    + f"The correct option applies this guidance to {service}."
                 ),
                 "citations": [citation],
                 "confidence_weight": round(domain["weight_pct"] / 100, 2),
