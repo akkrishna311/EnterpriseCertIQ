@@ -18,7 +18,11 @@ import pytest
 
 from backend.middleware.pipeline import redact_pii, apply_pipeline
 from backend.core.agent import BaseAgent
-from backend.core.workflow import _has_red_objection, _is_valid_plan_payload
+from backend.core.workflow import (
+    _has_red_objection,
+    _is_valid_plan_payload,
+    _readiness_from_forecast,
+)
 from backend.mcp_server.server import (
     generate_assessment,
     compute_readiness_forecast,
@@ -108,6 +112,43 @@ async def test_assessment_questions_have_citations():
     ))
     assert a["questions"], "expected questions"
     assert all(q.get("citations") for q in a["questions"])
+
+
+@pytest.mark.asyncio
+async def test_assessment_questions_grounded_in_excerpt():
+    """Questions should embed the approved-source excerpt, not just a template."""
+    a = await generate_assessment.fn(AssessmentInput(
+        learner_id="L-1004", cert_id="AZ-204", question_count=6,
+    ))
+    grounded = [q for q in a["questions"] if "Approved source" in q["question_text"]]
+    assert grounded, "expected at least one question grounded in a retrieved excerpt"
+
+
+@pytest.mark.asyncio
+async def test_assessment_difficulty_filter():
+    a = await generate_assessment.fn(AssessmentInput(
+        learner_id="L-1004", cert_id="AZ-204", question_count=6, difficulty="Hard",
+    ))
+    assert all(q["difficulty"] == "Hard" for q in a["questions"])
+
+
+# ── Readiness decision (Assessment Agent loop-back control flow) ─────────────
+
+def test_readiness_decision_ready_advances():
+    d = _readiness_from_forecast({"estimated_exam_score": 780, "pass_threshold": 700})
+    assert d["recommendation"] == "advance" and d["verdict"] == "ready"
+
+
+def test_readiness_decision_below_threshold_remediates():
+    d = _readiness_from_forecast({"estimated_exam_score": 600, "pass_threshold": 700,
+                                  "weakest_topic": "data"})
+    assert d["recommendation"] == "remediate" and d["verdict"] == "not_ready"
+    assert d["weakest_topic"] == "data"
+
+
+def test_readiness_decision_insufficient_evidence():
+    d = _readiness_from_forecast({"insufficient_evidence": True})
+    assert d["recommendation"] == "gather_evidence"
 
 
 # ── Readiness forecast honesty ───────────────────────────────────────────────
