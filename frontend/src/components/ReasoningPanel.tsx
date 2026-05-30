@@ -125,7 +125,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
                   {structuredOutput != null && (
                     <pre className="whitespace-pre-wrap rounded bg-slate-950 p-2 text-sky-200 font-mono">{formatEventValue(structuredOutput)}</pre>
                   )}
-                  {groundedness && (
+                  {groundedness != null && (
                     <div className="text-gray-300">Groundedness: {formatEventValue(groundedness)}</div>
                   )}
                   {Array.isArray(warnings) && warnings.length > 0 && (
@@ -158,7 +158,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
                 </span>
                 <span className="text-gray-400">[{AGENT_LABELS[e.agent_name] ?? e.agent_name}]</span>
                 <span>{e.event_type.replace(/_/g, ' ')}</span>
-                {e.data?.tool && <span className="text-cyan-300">→ {String(e.data.tool)}</span>}
+                {e.data?.tool != null && <span className="text-cyan-300">→ {String(e.data.tool)}</span>}
                 {typeof e.data?.message === 'string' && <span className="text-red-300">- {e.data.message}</span>}
               </div>
               {(typeof e.data?.content === 'string' && e.data.content.trim()) && (

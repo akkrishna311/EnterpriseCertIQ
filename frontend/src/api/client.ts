@@ -42,8 +42,12 @@ export const api = {
   approvePlan: (plan_id: string) => postJSON('/plans/approve', { plan_id, approved_by: 'human' }),
   mastery: (lid: string, cid: string) => fetchJSON<MasteryGrid>(`/mastery/${lid}/${cid}`),
   forecast: (lid: string, cid: string) => fetchJSON<Forecast>(`/forecast/${lid}/${cid}`),
-  generateAssessment: (lid: string, cid: string) =>
-    postNoBodyJSON<Assessment>(`/assessment/generate?learner_id=${lid}&cert_id=${cid}`),
+  generateAssessment: (lid: string, cid: string, difficulty?: string, count = 20) => {
+    const diff = difficulty && difficulty !== 'Mixed' ? `&difficulty=${difficulty}` : ''
+    return postNoBodyJSON<Assessment>(
+      `/assessment/generate?learner_id=${lid}&cert_id=${cid}&question_count=${count}${diff}`,
+    )
+  },
   certStructure: (cid: string) => fetchJSON<CertStructure>(`/cert-structures/${cid}`),
   managerInsights: (tid: string) => fetchJSON<TeamInsights>(`/manager/${tid}/insights`),
 }
@@ -65,6 +69,7 @@ export interface Team {
   manager_id: string
   members: string[]
   cert_targets: string[]
+  quarter_goal?: string
 }
 
 export interface DomainMastery {
@@ -137,6 +142,7 @@ export interface CertStructure {
 
 export interface TeamInsights {
   team_id: string
+  member_count: number
   average_meeting_hours_pw: number
   high_capacity_risk_members: string[]
   members: MemberContext[]

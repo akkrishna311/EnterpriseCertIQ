@@ -285,7 +285,8 @@ def build_agents(on_event=None) -> dict:
     """Build and return all agents keyed by name."""
 
     def make_agent(name: str, prompt_dir: str, tools: list, model_role: str = "default",
-                   temperature: float = 0.3, response_format=None) -> BaseAgent:
+                   temperature: float = 0.3, response_format=None,
+                   max_tool_rounds: int = 5) -> BaseAgent:
         agent = BaseAgent(
             name=name,
             instructions=_load_prompt(prompt_dir),
@@ -293,6 +294,7 @@ def build_agents(on_event=None) -> dict:
             model_role=model_role,
             response_format=response_format,
             temperature=temperature,
+            max_tool_rounds=max_tool_rounds,
             on_event=on_event,
         )
         for tool in _OWN_TOOLS:
@@ -310,6 +312,10 @@ def build_agents(on_event=None) -> dict:
         _OWN_TOOLS[:3] + _LEARN_TOOLS,
         temperature=0.1,
         response_format=CuratedTopicList,
+        # Cap grounding rounds: tool-eager models (qwen) otherwise loop on
+        # MS Learn searches and make demo runs slow. 2 rounds is enough to
+        # ground via Foundry IQ + one MS Learn lookup.
+        max_tool_rounds=2,
     )
     planner = make_agent(
         "plan_generator",

@@ -124,6 +124,7 @@ class AssessmentInput(BaseModel):
     cert_id: str
     domain_focus: Optional[str] = None
     question_count: int = 20
+    difficulty: Optional[str] = None  # "Easy" | "Medium" | "Hard" | None/"Mixed"
 
 
 class ForecastInput(BaseModel):
@@ -293,7 +294,10 @@ async def generate_assessment(args: AssessmentInput) -> dict:
 
         for i in range(questions_for_domain):
             service = services[i % max(len(services), 1)]
-            difficulty = ["Easy", "Medium", "Hard"][question_index % 3]
+            if args.difficulty and args.difficulty.capitalize() in ("Easy", "Medium", "Hard"):
+                difficulty = args.difficulty.capitalize()
+            else:
+                difficulty = ["Easy", "Medium", "Hard"][question_index % 3]
             stem = QUESTION_STEMS[question_index % len(QUESTION_STEMS)].format(
                 cert_id=args.cert_id,
                 domain=domain["name"],

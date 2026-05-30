@@ -150,7 +150,7 @@ cp .env.example .env.local
 ```dotenv
 MODEL_BACKEND=foundry_local
 FOUNDRY_LOCAL_ENDPOINT=http://localhost:5273/v1
-FOUNDRY_LOCAL_MODEL_ALIAS=phi-4-mini       # or qwen2.5-0.5b, phi-4-mini-reasoning
+FOUNDRY_LOCAL_MODEL_ALIAS=qwen2.5-7b       # reliable tool-calling + good reasoning (measured best on M-series)
 STORAGE_BACKEND=local
 ```
 
@@ -234,7 +234,7 @@ uvicorn backend.main:app --reload --port 8000
 python3 -m backend.mcp_server.server
 
 # Model setup only
-python3 scripts/setup_foundry.py --alias phi-4-mini
+python3 scripts/setup_foundry.py --alias qwen2.5-7b
 python3 scripts/setup_foundry.py --list
 
 # Frontend only

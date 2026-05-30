@@ -285,12 +285,14 @@ async def generate_assessment_route(
     learner_id: str = Query(...),
     cert_id: str = Query(...),
     question_count: int = Query(default=20),
+    difficulty: Optional[str] = Query(default=None),
 ):
     from backend.mcp_server.server import generate_assessment, AssessmentInput
     result = await generate_assessment.fn(AssessmentInput(
         learner_id=learner_id,
         cert_id=cert_id,
         question_count=question_count,
+        difficulty=difficulty,
     ))
     # Persist the full assessment (incl. answer key) server-side so it can be
     # scored later, then return a client-safe copy with the answer key removed.
