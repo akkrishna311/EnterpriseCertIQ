@@ -206,7 +206,8 @@ async def _fallback_manager(context: dict) -> dict:
 
 
 async def _fallback_audio(context: dict) -> dict:
-    """A grounded two-host briefing script built from the cert ontology + forecast."""
+    """A grounded two-host script. Concept mode deep-teaches one domain; overview mode
+    sweeps the exam domains."""
     from backend.iq.fabric_iq import get_fabric_iq
     cert_id = context.get("cert_id", "")
     learner = _learner_obj(context)
@@ -215,6 +216,47 @@ async def _fallback_audio(context: dict) -> dict:
     forecast = context.get("forecast") or {}
     weak = forecast.get("weakest_topic", "")
 
+    # ── Concept mode: deep-teach one domain ──────────────────────────────────
+    focus = context.get("focus_domain")
+    if context.get("mode") == "concept" and focus:
+        services = focus.get("services", [])
+        svc = ", ".join(services[:4]) or "the core services"
+        svc1 = services[0] if services else "the primary service"
+        svc2 = services[1] if len(services) > 1 else svc1
+        weight = int(focus.get("weight_pct", 0))
+        excerpt = (context.get("excerpts") or [{}])[0].get("excerpt", "")
+        why = ("It's your weakest, highest-leverage area right now"
+               if context.get("is_weakest") else "You picked this concept to focus on")
+        c_turns = [
+            {"speaker": "host_a", "text": f"Welcome to a focused episode on {focus['name']} for {cert_id}. "
+                                          f"{why}, and it's about {weight} percent of the exam — so it's worth real points."},
+            {"speaker": "host_b", "text": "Let's get into it. What exactly does this concept cover?"},
+            {"speaker": "host_a", "text": f"At its core, {focus['name']} is about working with {svc}. "
+                                          + (f"From the approved guide: {excerpt[:160]}" if excerpt else "")},
+            {"speaker": "host_b", "text": "Why does it matter so much for the exam?"},
+            {"speaker": "host_a", "text": f"Because it carries {weight} percent of the weight, you'll see "
+                                          f"several scenario questions here — especially around {svc1} and {svc2}."},
+            {"speaker": "host_b", "text": "Can you walk me through a concrete example?"},
+            {"speaker": "host_a", "text": f"Sure. Imagine you need to design a solution using {svc1}. "
+                                          f"You'd reach for {svc1} when the requirement calls for it, and pair it with "
+                                          f"{svc2} where they complement each other. Match the service to the requirement."},
+            {"speaker": "host_b", "text": "What's a common mistake people make?"},
+            {"speaker": "host_a", "text": f"A frequent trap is picking a familiar service instead of the one that fits the "
+                                          f"stated constraint. Always anchor on what {focus['name'].lower()} actually requires."},
+            {"speaker": "host_b", "text": "Give me a quick self-check before we wrap?"},
+            {"speaker": "host_a", "text": f"Here's one: for a {focus['name'].lower()} scenario, which of {svc1} or {svc2} "
+                                          f"best fits, and why? Pause, answer it out loud, then confirm against the guide."},
+            {"speaker": "host_a", "text": f"That's {focus['name']}. Put one focused session here, then take a short quiz to lock it in."},
+        ]
+        return {
+            "title": f"{cert_id}: {focus['name']} — Deep Dive",
+            "cert_id": cert_id, "learner_id": learner_id, "turns": c_turns,
+            "citations": [f"{cert_id}: Key Topics by Domain",
+                          f"cert_structures: {focus.get('domain_id', '')} ({weight}%)"],
+            "ai_disclosure": f"{_DISCLOSURE} (concept podcast)",
+        }
+
+    # ── Overview mode: sweep the exam domains ────────────────────────────────
     turns = [
         {"speaker": "host_a", "text": f"Welcome to your {cert_id} study briefing. "
                                       "We'll walk through the exam domains and where to focus your time."},

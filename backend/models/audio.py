@@ -21,6 +21,9 @@ class PodcastScript(BaseModel):
     title: str = ""
     cert_id: str = ""
     learner_id: str = ""
+    mode: str = ""              # "concept" | "overview"
+    focus: str = ""            # the concept taught (domain name) or "overview"
+    is_weakest: bool = False   # True when focus was auto-selected as the weakest area
     turns: list[PodcastTurn] = Field(default_factory=list)
     citations: list[str] = Field(default_factory=list)
     ai_disclosure: str = (

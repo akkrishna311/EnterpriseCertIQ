@@ -112,6 +112,7 @@ class FoundryIQClient:
             async with httpx.AsyncClient(timeout=15) as c:
                 r = await c.post(
                     f"{endpoint}/indexes/{index}/docs/search",
+                    params={"api-version": "2023-11-01"},  # required by Azure AI Search REST
                     json={"search": query, "top": top_k, "select": "id,title,content,source_url"},
                     headers={"api-key": self.s.azure_search_key or self.s.azure_ai_api_key},
                 )

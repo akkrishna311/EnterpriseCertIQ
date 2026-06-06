@@ -17,9 +17,11 @@ claim to a file or a clickable artifact.
 5. **Download the Manager Handoff Brief PDF** and a **Learner Readiness PDF**.
 6. **/health** → show all 3 IQ layers, `content_safety: azure`, and the **LLM cache
    hit-rate** climbing when you re-run the same learner (instant, ~0 tokens).
-7. **Audio Briefing tab** → generate a grounded two-host "audio study briefing" (Coach +
-   Learner). Play the MP3, then point at the **transcript + citations** beside it — same
-   approved content, spoken. ("Study in your Thursday focus gap.")
+7. **Audio Briefing tab** → grounded two-host **learning podcast** (Coach + Learner). Leave
+   the picker on **"My weakest area"** to show it auto-targets the highest-leverage gap, then
+   open the picker and choose **any concept** to deep-teach (definition → why → scenario →
+   pitfall → self-check). Play the MP3, then point at the **transcript + citations** beside it
+   — same approved content, spoken. ("Study your weakest concept in your Thursday focus gap.")
 
 ## Scoring-criteria cheat sheet
 
@@ -74,15 +76,18 @@ bulletproof.
 Synthetic data only (`L-1001`/`EMP-001`/`TEAM-A`). Manager Insights never exposes individual
 exam scores — enforced and unit-tested (rubric check M3).
 
-**Q: The audio briefing — isn't that just NotebookLM?**
-Same idea, but defensible for enterprise learning. NotebookLM narrates arbitrary user docs;
-ours generates the two-host script **only from approved cert content** (Fabric IQ domains +
-Foundry IQ excerpts + the readiness forecast) and **shows the transcript with citations next
-to the audio** — so there's no hallucinated study advice in a format that's hard to fact-check.
-It's `backend/audio/podcast.py` (two-voice SSML → Azure AI Speech) + the `audio_curriculum`
-agent, with a deterministic fallback that produces a full grounded script with no model.
-The transcript works with no Speech key; audio synthesis is opt-in. Ties into the "study in
-the flow of work" Work IQ angle.
+**Q: The learning podcast — isn't that just NotebookLM?**
+Same idea, but defensible *and* targeted for enterprise learning. NotebookLM narrates arbitrary
+user docs; ours generates the two-host script **only from approved cert content** (Fabric IQ
+domains + Foundry IQ excerpts + the readiness forecast) and **shows the transcript with
+citations next to the audio** — no hallucinated study advice in a format that's hard to
+fact-check. Crucially it's **adaptive**: by default it **deep-teaches the learner's weakest,
+highest-leverage concept** (resolved from readiness semantics), and the learner can **pick any
+concept** to study on demand (`/api/audio/concepts/...` → `?focus=`). It's
+`backend/audio/podcast.py` (two-voice SSML → Azure AI Speech) + the `audio_curriculum` agent,
+with a deterministic fallback that produces a full grounded script with no model. Transcript
+works with no Speech key; synthesis is opt-in. Ties into the "study in the flow of work" Work
+IQ angle.
 
 **Q: Deployment?**
 Containerised (backend + frontend Dockerfiles), one-command Azure Container Apps deploy in

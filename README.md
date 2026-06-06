@@ -232,8 +232,9 @@ If you want strict criteria coverage with minimal Azure spend, the minimum Azure
 | `GET/POST/DELETE` | `/api/manager/{team_id}/interventions` | Persisted manager intervention queue |
 | `GET` | `/api/reports/learner/{lid}/{cid}.pdf` | Learner readiness PDF (demo-cached) |
 | `GET` | `/api/reports/manager/{team_id}.pdf` | Manager handoff brief PDF (demo-cached) |
-| `GET` | `/api/audio/learner/{lid}/{cid}/transcript` | Grounded two-host audio briefing transcript + citations |
-| `GET` | `/api/audio/learner/{lid}/{cid}.mp3` | Synthesized audio briefing (Azure AI Speech; 503 if unconfigured) |
+| `GET` | `/api/audio/concepts/{lid}/{cid}` | Concepts the learner can pick for a podcast (weakest flagged) |
+| `GET` | `/api/audio/learner/{lid}/{cid}/transcript` | Grounded podcast transcript + citations (`?focus=weakest\|overview\|<concept>`) |
+| `GET` | `/api/audio/learner/{lid}/{cid}.mp3` | Synthesized podcast (Azure AI Speech; 503 if unconfigured; same `?focus=`) |
 | `GET` | `/api/cache/stats` | LLM response-cache hit/miss/entry counters |
 | `GET` | `/api/cert-structures/{cert_id}` | Cert domain structure |
 | `GET` | `/docs` | Interactive Swagger UI |
@@ -375,11 +376,14 @@ enterprisecertiq/
   with a 0.8 pass threshold, run in CI with no credentials.
 - **PDF reports** (`backend/reports/pdf.py`) — learner readiness + manager handoff brief,
   demo-cached for instant repeat downloads.
-- **Grounded audio study briefing** (`backend/audio/podcast.py`) — a NotebookLM-style
+- **Grounded learning podcast** (`backend/audio/podcast.py`) — a NotebookLM-style
   **two-host podcast** generated *only* from approved cert content, with the transcript +
-  citations shown for provenance. Two-voice SSML → Azure AI Speech (REST); transcript works
-  with no key, audio synthesis is opt-in, MP3s demo-cached. Deterministic fallback → a full
-  script with zero model.
+  citations shown for provenance. It **deep-teaches the learner's weakest concept by default**
+  (resolved via Fabric IQ readiness semantics) and the learner can **pick any concept** to
+  study (definition → why it matters → worked scenario → common mistake → self-check), or a
+  full exam overview. Two-voice SSML → Azure AI Speech (REST); transcript works with no key,
+  audio synthesis is opt-in, MP3s demo-cached. Deterministic fallback → a full script with
+  zero model.
 - **Deterministic tier-3 fallback** (`backend/agents/fallbacks.py`) — every agent has a
   no-model deterministic builder. `AGENT_FALLBACK_MODE=auto` (default) degrades gracefully on
   a model error; `=force` runs the **entire pipeline with zero model calls** (instant,

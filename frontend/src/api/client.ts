@@ -61,8 +61,11 @@ export const api = {
     postJSON<AssessmentResult>('/assessment/submit', body)
   ),
   certStructure: (cid: string) => fetchJSON<CertStructure>(`/cert-structures/${cid}`),
-  audioTranscript: (lid: string, cid: string) => fetchJSON<AudioTranscript>(`/audio/learner/${lid}/${cid}/transcript`),
-  audioUrl: (lid: string, cid: string) => `/api/audio/learner/${lid}/${cid}.mp3`,
+  audioConcepts: (lid: string, cid: string) => fetchJSON<AudioConcepts>(`/audio/concepts/${lid}/${cid}`),
+  audioTranscript: (lid: string, cid: string, focus?: string) => fetchJSON<AudioTranscript>(
+    `/audio/learner/${lid}/${cid}/transcript${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
+  audioUrl: (lid: string, cid: string, focus?: string) =>
+    `/api/audio/learner/${lid}/${cid}.mp3${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`,
   managerInsights: (tid: string) => fetchJSON<TeamInsights>(`/manager/${tid}/insights`),
   managerWhatIf: (tid: string, body: ManagerWhatIfRequest) => postJSON<ManagerWhatIfResult>(`/manager/${tid}/what-if`, body),
   peerSessions: (tid: string) => fetchJSON<PeerLearningSession[]>(`/manager/${tid}/peer-sessions`),
@@ -102,6 +105,9 @@ export interface PodcastScript {
   title: string
   cert_id: string
   learner_id: string
+  mode?: string
+  focus?: string
+  is_weakest?: boolean
   turns: PodcastTurn[]
   citations: string[]
   ai_disclosure: string
@@ -110,6 +116,21 @@ export interface PodcastScript {
 export interface AudioTranscript {
   script: PodcastScript
   audio_available: boolean
+}
+
+export interface AudioConcept {
+  domain_id: string
+  name: string
+  weight_pct: number
+  services: string[]
+  mastery_pct: number | null
+  is_weakest: boolean
+}
+
+export interface AudioConcepts {
+  cert_id: string
+  weakest_domain_id: string
+  concepts: AudioConcept[]
 }
 
 export interface DomainMastery {

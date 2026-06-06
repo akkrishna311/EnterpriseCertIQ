@@ -1034,32 +1034,90 @@ async def manager_brief_pdf(team_id: str):
     )
 
 
-# ── Audio study briefing (grounded, two-host) ───────────────────────────────
+# ── Audio study briefing / concept podcast (grounded, two-host) ─────────────
 
-async def _build_audio_context(learner_id: str, cert_id: str):
-    """Gather grounded material for the audio briefing: weighted domains (Fabric IQ),
-    readiness forecast, and cited excerpts (Foundry IQ)."""
+def _resolve_focus_domain(cert_id: str, evidence: dict, focus: Optional[str]):
+    """Pick which concept to teach.
+
+    focus None/"weakest" → the learner's highest-leverage gap (or top-weight domain).
+    focus "overview"     → no single domain (multi-domain overview briefing).
+    focus <id/name/svc>  → the matching domain (learner's choice).
+    Returns (domain_dict | None, is_weakest, mode).
+    """
+    from backend.iq.fabric_iq import get_fabric_iq
+    fiq = get_fabric_iq()
+    domains = fiq.get_domain_thresholds(cert_id)
+    f = (focus or "").strip().lower()
+
+    if f == "overview":
+        return None, False, "overview"
+
+    if f and f not in ("weakest", "auto"):
+        for d in domains:
+            haystack = (d["domain_id"] + " " + d["name"] + " " + " ".join(d.get("services", []))).lower()
+            if f in d["domain_id"].lower() or f in d["name"].lower() or f in haystack:
+                return d, False, "concept"
+        # no match → fall through to weakest
+
+    sem = fiq.get_readiness_semantics(cert_id, evidence)
+    gap = None if sem.get("insufficient_evidence") else sem.get("highest_leverage_gap")
+    if gap:
+        for d in domains:
+            if d["name"] == gap["name"]:
+                return d, True, "concept"
+    if domains:
+        return max(domains, key=lambda d: d.get("weight_pct", 0)), True, "concept"
+    return None, False, "overview"
+
+
+async def _build_audio_context(learner_id: str, cert_id: str, focus: Optional[str] = None):
+    """Gather grounded material for the podcast: weighted domains (Fabric IQ), the
+    readiness forecast, the focus concept, and cited excerpts (Foundry IQ)."""
     from backend.iq.fabric_iq import get_fabric_iq
     from backend.iq.foundry_iq import get_foundry_iq
 
     learner = _load_learner(learner_id)  # 404s if unknown
     thresholds = get_fabric_iq().get_domain_thresholds(cert_id)
     forecast = await get_forecast(learner_id, cert_id)
-    results = await get_foundry_iq().search(f"{cert_id} key topics by domain", top_k=3)
+    latest = await _latest_submitted_assessment(learner_id, cert_id)
+    evidence = _normalise_evidence(_evidence_for_manager_summary(learner, latest))
+    focus_domain, is_weakest, mode = _resolve_focus_domain(cert_id, evidence, focus)
+
+    if mode == "concept" and focus_domain:
+        query = f"{cert_id} {focus_domain['name']} {' '.join(focus_domain.get('services', [])[:3])}"
+    else:
+        query = f"{cert_id} key topics by domain"
+    results = await get_foundry_iq().search(query, top_k=3)
     excerpts = [{"title": r.title, "excerpt": r.excerpt} for r in results]
     return {
         "learner_obj": learner, "learner_id": learner_id, "cert_id": cert_id,
         "domains": thresholds, "forecast": forecast, "excerpts": excerpts,
+        "focus_domain": focus_domain, "is_weakest": is_weakest, "mode": mode,
     }
 
 
 def _audio_user_message(ctx: dict) -> str:
+    excerpts = "\n".join(f"- {e['title']}: {e['excerpt'][:220]}" for e in ctx["excerpts"])
+    if ctx["mode"] == "concept" and ctx["focus_domain"]:
+        d = ctx["focus_domain"]
+        why = ("This is the learner's weakest / highest-leverage area."
+               if ctx["is_weakest"] else "The learner chose this concept to study.")
+        return (
+            f"Certification: {ctx['cert_id']}\nLearner: {ctx['learner_id']}\n"
+            f"DEEP-TEACH this ONE concept as a focused podcast episode: "
+            f"{d['name']} ({d['weight_pct']}% of the exam).\n"
+            f"Key services: {', '.join(d.get('services', []))}.\n{why}\n"
+            f"Approved source excerpts:\n{excerpts}\n\n"
+            "Teach it thoroughly and conversationally: what it is, why it matters for the "
+            "exam, the key services, a concrete worked scenario, a common mistake to avoid, "
+            "and end with ONE self-check question. Return PodcastScript JSON grounded only "
+            "in the material above."
+        )
     domains = "; ".join(
         f"{d['name']} ({d['weight_pct']}%) services: {', '.join(d.get('services', [])[:3])}"
         for d in ctx["domains"]
     )
     weak = ctx["forecast"].get("weakest_topic", "")
-    excerpts = "\n".join(f"- {e['title']}: {e['excerpt'][:220]}" for e in ctx["excerpts"])
     return (
         f"Certification: {ctx['cert_id']}\nLearner: {ctx['learner_id']}\n"
         f"Weighted domains: {domains}\n"
@@ -1070,41 +1128,75 @@ def _audio_user_message(ctx: dict) -> str:
     )
 
 
-async def _generate_audio_script(learner_id: str, cert_id: str) -> dict:
+async def _generate_audio_script(learner_id: str, cert_id: str, focus: Optional[str] = None) -> dict:
     from backend.agents.factory import build_audio_agent
     from backend.agents.fallbacks import build_fallback
 
-    ctx = await _build_audio_context(learner_id, cert_id)
+    ctx = await _build_audio_context(learner_id, cert_id, focus)
     agent = build_audio_agent()
     result = await agent.run(messages=[{"role": "user", "content": _audio_user_message(ctx)}], context=ctx)
     payload = result.parsed.model_dump(mode="json") if result.parsed is not None else None
     if not payload or not payload.get("turns"):
         payload = await build_fallback("audio_curriculum", ctx)  # last-resort deterministic
+    # annotate what was taught (the endpoint's selection is authoritative).
+    if isinstance(payload, dict):
+        payload["mode"] = ctx["mode"]
+        payload["focus"] = (ctx["focus_domain"] or {}).get("name", "") if ctx["focus_domain"] else "overview"
+        payload["is_weakest"] = ctx["is_weakest"]
     return payload
 
 
+@app.get("/api/audio/concepts/{learner_id}/{cert_id}")
+async def audio_concepts(learner_id: str, cert_id: str):
+    """List concepts the learner can pick for a podcast, flagging the weakest (recommended)."""
+    from backend.iq.fabric_iq import get_fabric_iq
+    from backend.mcp_server.server import compute_domain_mastery, DomainMasteryInput
+
+    learner = _load_learner(learner_id)
+    domains = get_fabric_iq().get_domain_thresholds(cert_id)
+    latest = await _latest_submitted_assessment(learner_id, cert_id)
+    evidence = _normalise_evidence(_evidence_for_manager_summary(learner, latest))
+    focus_domain, _, _ = _resolve_focus_domain(cert_id, evidence, None)
+    weakest_id = (focus_domain or {}).get("domain_id", "")
+
+    mastery = await compute_domain_mastery.fn(DomainMasteryInput(
+        learner_id=learner_id, cert_id=cert_id, evidence_json=json.dumps(evidence)))
+    mastery_by_id = {d["domain_id"]: d.get("mastery_pct") for d in mastery.get("domains", [])}
+
+    concepts = [{
+        "domain_id": d["domain_id"], "name": d["name"], "weight_pct": d["weight_pct"],
+        "services": d.get("services", []), "mastery_pct": mastery_by_id.get(d["domain_id"]),
+        "is_weakest": d["domain_id"] == weakest_id,
+    } for d in domains]
+    return {"cert_id": cert_id, "weakest_domain_id": weakest_id, "concepts": concepts}
+
+
 @app.get("/api/audio/learner/{learner_id}/{cert_id}/transcript")
-async def audio_transcript(learner_id: str, cert_id: str):
-    """Grounded two-host briefing transcript + citations (works without a Speech key)."""
+async def audio_transcript(learner_id: str, cert_id: str, focus: Optional[str] = Query(None)):
+    """Grounded podcast transcript + citations (works without a Speech key).
+
+    `focus` selects the concept: omitted/"weakest" → teach the weakest area;
+    "overview" → multi-domain briefing; a domain id/name/service → teach that concept.
+    """
     from backend.audio.podcast import is_configured
-    script = await _generate_audio_script(learner_id, cert_id)
+    script = await _generate_audio_script(learner_id, cert_id, focus)
     return {"script": script, "audio_available": is_configured()}
 
 
 @app.get("/api/audio/learner/{learner_id}/{cert_id}.mp3")
-async def audio_mp3(learner_id: str, cert_id: str):
-    """Synthesize the briefing to MP3 via Azure AI Speech (503 if not configured)."""
+async def audio_mp3(learner_id: str, cert_id: str, focus: Optional[str] = Query(None)):
+    """Synthesize the podcast to MP3 via Azure AI Speech (503 if not configured)."""
     from backend.audio.podcast import synthesize_script, AudioNotConfigured
     from backend.models import PodcastScript
 
-    script = await _generate_audio_script(learner_id, cert_id)
+    script = await _generate_audio_script(learner_id, cert_id, focus)
     try:
         audio = await synthesize_script(PodcastScript.model_validate(script), cache_key=learner_id)
     except AudioNotConfigured as e:
         raise HTTPException(status_code=503, detail=str(e))
     return Response(
         content=audio, media_type="audio/mpeg",
-        headers={"Content-Disposition": f'inline; filename="briefing_{learner_id}_{cert_id}.mp3"'},
+        headers={"Content-Disposition": f'inline; filename="podcast_{learner_id}_{cert_id}.mp3"'},
     )
 
 
