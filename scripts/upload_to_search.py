@@ -18,6 +18,9 @@ import re
 import sys
 from pathlib import Path
 
+# Ensure the repo root is importable when run as `python scripts/upload_to_search.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
