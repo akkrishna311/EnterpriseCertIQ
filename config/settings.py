@@ -104,6 +104,17 @@ class Settings(BaseSettings):
     # From Azure portal: Application Insights → Connection String
     applicationinsights_connection_string: str = ""
 
+    # ── Audio briefing (Azure AI Speech TTS) ──────────────────────────
+    # Grounded two-host "audio study briefing". Synthesis uses Azure AI Speech
+    # (key-based → can live in its own account). Transcript works with no key;
+    # audio synthesis requires speech_key + speech_region.
+    enable_audio: bool = True
+    speech_key: str = ""
+    speech_region: str = ""            # e.g. eastus
+    audio_locale: str = "en-US"
+    audio_voice_host_a: str = "en-US-AvaNeural"
+    audio_voice_host_b: str = "en-US-AndrewNeural"
+
     # ── Azure Key Vault (secret store) ────────────────────────────────
     # When set, the backend loads secrets from this vault at startup and
     # overrides the matching settings (KV is the source of truth in cloud).

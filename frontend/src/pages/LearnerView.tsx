@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle, Headphones } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { api, streamEvents, type TraceEvent, type AssessmentResult, type Forecast, type MasteryGrid, type ProgressSnapshot } from '../api/client'
 import ReasoningPanel from '../components/ReasoningPanel'
@@ -12,6 +12,7 @@ import ServiceHeatmap from '../components/ServiceHeatmap'
 import PassThresholdGauge from '../components/PassThresholdGauge'
 import AIDisclosureBanner from '../components/AIDisclosureBanner'
 import StudyPlanView, { type StudyPlan } from '../components/StudyPlanView'
+import AudioBriefing from '../components/AudioBriefing'
 
 function mergeObjections(existing: any[], incoming: any[]): any[] {
   const merged = [...existing]
@@ -29,7 +30,7 @@ function mergeObjections(existing: any[], incoming: any[]): any[] {
   return merged
 }
 
-type TabKey = 'reasoning' | 'plan' | 'critic' | 'progress' | 'readiness' | 'assessment'
+type TabKey = 'reasoning' | 'plan' | 'critic' | 'progress' | 'readiness' | 'assessment' | 'audio'
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'reasoning', label: 'Journey Trace', icon: <Zap size={14} /> },
@@ -38,6 +39,7 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'progress', label: 'Progress', icon: <BookOpen size={14} /> },
   { key: 'readiness', label: 'Exam Readiness', icon: <Target size={14} /> },
   { key: 'assessment', label: 'Practice Exam', icon: <BookOpen size={14} /> },
+  { key: 'audio', label: 'Audio Briefing', icon: <Headphones size={14} /> },
 ]
 
 const DIFFICULTIES = ['Mixed', 'Easy', 'Medium', 'Hard'] as const
@@ -512,6 +514,12 @@ export default function LearnerView() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'audio' && learner && (
+            <div className="mt-3">
+              <AudioBriefing learnerId={selectedLearner} certId={learner.cert_target} />
             </div>
           )}
 

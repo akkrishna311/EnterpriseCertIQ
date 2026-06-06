@@ -205,6 +205,50 @@ async def _fallback_manager(context: dict) -> dict:
     }
 
 
+async def _fallback_audio(context: dict) -> dict:
+    """A grounded two-host briefing script built from the cert ontology + forecast."""
+    from backend.iq.fabric_iq import get_fabric_iq
+    cert_id = context.get("cert_id", "")
+    learner = _learner_obj(context)
+    learner_id = context.get("learner_id", getattr(learner, "learner_id", ""))
+    thresholds = context.get("domains") or get_fabric_iq().get_domain_thresholds(cert_id)
+    forecast = context.get("forecast") or {}
+    weak = forecast.get("weakest_topic", "")
+
+    turns = [
+        {"speaker": "host_a", "text": f"Welcome to your {cert_id} study briefing. "
+                                      "We'll walk through the exam domains and where to focus your time."},
+        {"speaker": "host_b", "text": "Sounds good. Which areas carry the most weight?"},
+    ]
+    for d in sorted(thresholds, key=lambda x: x.get("weight_pct", 0), reverse=True)[:5]:
+        svc = ", ".join(d.get("services", [])[:3])
+        turns.append({"speaker": "host_a",
+                      "text": f"{d['name']} is about {int(d['weight_pct'])} percent of the exam. "
+                              f"Key areas include {svc}." if svc else
+                              f"{d['name']} is about {int(d['weight_pct'])} percent of the exam."})
+        turns.append({"speaker": "host_b",
+                      "text": f"Got it, so {d['name'].lower()} is worth real points."})
+    if weak:
+        turns.append({"speaker": "host_a",
+                      "text": f"Based on your readiness forecast, start with {weak} — "
+                              "it's your weakest area right now."})
+        turns.append({"speaker": "host_b", "text": "Makes sense. I'll prioritise that first."})
+    turns.append({"speaker": "host_a",
+                  "text": "You've got this. Keep sessions short and focused, and take a full "
+                          "mock exam before test day. Good luck!"})
+
+    citations = [f"{cert_id}: Key Topics by Domain"] + [
+        f"cert_structures: {d.get('domain_id', '')} ({int(d.get('weight_pct', 0))}%)"
+        for d in thresholds[:3]
+    ]
+    return {
+        "title": f"{cert_id} Audio Study Briefing",
+        "cert_id": cert_id, "learner_id": learner_id,
+        "turns": turns, "citations": citations,
+        "ai_disclosure": f"{_DISCLOSURE} (audio briefing script)",
+    }
+
+
 async def _fallback_retrospective(context: dict) -> str:
     learner = _learner_obj(context)
     attempts = getattr(learner, "prior_attempts", []) if learner else []
@@ -223,6 +267,7 @@ _BUILDERS = {
     "assessment": _fallback_assessment,
     "manager_insights": _fallback_manager,
     "retrospective": _fallback_retrospective,
+    "audio_curriculum": _fallback_audio,
 }
 
 

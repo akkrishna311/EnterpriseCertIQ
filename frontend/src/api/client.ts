@@ -61,6 +61,8 @@ export const api = {
     postJSON<AssessmentResult>('/assessment/submit', body)
   ),
   certStructure: (cid: string) => fetchJSON<CertStructure>(`/cert-structures/${cid}`),
+  audioTranscript: (lid: string, cid: string) => fetchJSON<AudioTranscript>(`/audio/learner/${lid}/${cid}/transcript`),
+  audioUrl: (lid: string, cid: string) => `/api/audio/learner/${lid}/${cid}.mp3`,
   managerInsights: (tid: string) => fetchJSON<TeamInsights>(`/manager/${tid}/insights`),
   managerWhatIf: (tid: string, body: ManagerWhatIfRequest) => postJSON<ManagerWhatIfResult>(`/manager/${tid}/what-if`, body),
   peerSessions: (tid: string) => fetchJSON<PeerLearningSession[]>(`/manager/${tid}/peer-sessions`),
@@ -89,6 +91,25 @@ export interface Team {
   members: string[]
   cert_targets: string[]
   quarter_goal?: string
+}
+
+export interface PodcastTurn {
+  speaker: 'host_a' | 'host_b'
+  text: string
+}
+
+export interface PodcastScript {
+  title: string
+  cert_id: string
+  learner_id: string
+  turns: PodcastTurn[]
+  citations: string[]
+  ai_disclosure: string
+}
+
+export interface AudioTranscript {
+  script: PodcastScript
+  audio_available: boolean
 }
 
 export interface DomainMastery {

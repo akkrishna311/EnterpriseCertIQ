@@ -600,6 +600,7 @@ async def health():
         },
         "content_safety": content_safety_mode(),
         "llm_cache": llm_cache.stats(),
+        "audio": "azure_speech" if (s.enable_audio and s.speech_key and s.speech_region) else "transcript_only",
         "key_vault": "configured" if s.azure_key_vault_url else "off",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -1030,6 +1031,80 @@ async def manager_brief_pdf(team_id: str):
     return Response(
         content=pdf, media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="manager_brief_{team_id}.pdf"'},
+    )
+
+
+# ── Audio study briefing (grounded, two-host) ───────────────────────────────
+
+async def _build_audio_context(learner_id: str, cert_id: str):
+    """Gather grounded material for the audio briefing: weighted domains (Fabric IQ),
+    readiness forecast, and cited excerpts (Foundry IQ)."""
+    from backend.iq.fabric_iq import get_fabric_iq
+    from backend.iq.foundry_iq import get_foundry_iq
+
+    learner = _load_learner(learner_id)  # 404s if unknown
+    thresholds = get_fabric_iq().get_domain_thresholds(cert_id)
+    forecast = await get_forecast(learner_id, cert_id)
+    results = await get_foundry_iq().search(f"{cert_id} key topics by domain", top_k=3)
+    excerpts = [{"title": r.title, "excerpt": r.excerpt} for r in results]
+    return {
+        "learner_obj": learner, "learner_id": learner_id, "cert_id": cert_id,
+        "domains": thresholds, "forecast": forecast, "excerpts": excerpts,
+    }
+
+
+def _audio_user_message(ctx: dict) -> str:
+    domains = "; ".join(
+        f"{d['name']} ({d['weight_pct']}%) services: {', '.join(d.get('services', [])[:3])}"
+        for d in ctx["domains"]
+    )
+    weak = ctx["forecast"].get("weakest_topic", "")
+    excerpts = "\n".join(f"- {e['title']}: {e['excerpt'][:220]}" for e in ctx["excerpts"])
+    return (
+        f"Certification: {ctx['cert_id']}\nLearner: {ctx['learner_id']}\n"
+        f"Weighted domains: {domains}\n"
+        f"Weakest area (from readiness forecast): {weak or 'unknown'}\n"
+        f"Approved source excerpts:\n{excerpts}\n\n"
+        "Write the two-host audio study briefing as PodcastScript JSON, grounded only in "
+        "the material above."
+    )
+
+
+async def _generate_audio_script(learner_id: str, cert_id: str) -> dict:
+    from backend.agents.factory import build_audio_agent
+    from backend.agents.fallbacks import build_fallback
+
+    ctx = await _build_audio_context(learner_id, cert_id)
+    agent = build_audio_agent()
+    result = await agent.run(messages=[{"role": "user", "content": _audio_user_message(ctx)}], context=ctx)
+    payload = result.parsed.model_dump(mode="json") if result.parsed is not None else None
+    if not payload or not payload.get("turns"):
+        payload = await build_fallback("audio_curriculum", ctx)  # last-resort deterministic
+    return payload
+
+
+@app.get("/api/audio/learner/{learner_id}/{cert_id}/transcript")
+async def audio_transcript(learner_id: str, cert_id: str):
+    """Grounded two-host briefing transcript + citations (works without a Speech key)."""
+    from backend.audio.podcast import is_configured
+    script = await _generate_audio_script(learner_id, cert_id)
+    return {"script": script, "audio_available": is_configured()}
+
+
+@app.get("/api/audio/learner/{learner_id}/{cert_id}.mp3")
+async def audio_mp3(learner_id: str, cert_id: str):
+    """Synthesize the briefing to MP3 via Azure AI Speech (503 if not configured)."""
+    from backend.audio.podcast import synthesize_script, AudioNotConfigured
+    from backend.models import PodcastScript
+
+    script = await _generate_audio_script(learner_id, cert_id)
+    try:
+        audio = await synthesize_script(PodcastScript.model_validate(script), cache_key=learner_id)
+    except AudioNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return Response(
+        content=audio, media_type="audio/mpeg",
+        headers={"Content-Disposition": f'inline; filename="briefing_{learner_id}_{cert_id}.mp3"'},
     )
 
 

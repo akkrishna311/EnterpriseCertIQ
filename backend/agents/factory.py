@@ -409,3 +409,31 @@ def build_agents(on_event=None) -> dict:
         "assessment": assessment,
         "retrospective": retro,
     }
+
+
+def build_audio_agent(on_event=None) -> BaseAgent:
+    """Standalone agent that writes a grounded two-host audio study briefing.
+
+    Built on demand by the audio endpoints (not part of the workflow spine). Has a
+    deterministic tier-3 fallback so a transcript is produced even with no model.
+    """
+    from backend.models import PodcastScript
+
+    agent = BaseAgent(
+        name="audio_curriculum",
+        instructions=_load_prompt("audio_curriculum"),
+        tools=[_OWN_TOOLS[1]] + _FABRIC_TOOL,  # foundry_iq_search + fabric_iq_semantics
+        model_role="default",
+        response_format=PodcastScript,
+        temperature=0.4,
+        max_tool_rounds=2,
+        on_event=on_event,
+        supports_fallback=True,
+    )
+    for tool in _OWN_TOOLS:
+        tool_name = tool["function"]["name"]
+        agent.register_tool_executor(tool_name, lambda n=tool_name, **kw: _exec_own_tool(n, **kw))
+    for tool in _LEARN_TOOLS:
+        tool_name = tool["function"]["name"]
+        agent.register_tool_executor(tool_name, lambda n=tool_name, **kw: _exec_learn_tool(n, **kw))
+    return agent

@@ -31,6 +31,7 @@ SECRET_MAP: dict[str, str] = {
     "cosmos-key": "cosmos_key",
     "graph-access-token": "graph_access_token",
     "appinsights-connection-string": "applicationinsights_connection_string",
+    "speech-key": "speech_key",
 }
 
 
