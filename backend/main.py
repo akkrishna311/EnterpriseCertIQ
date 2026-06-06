@@ -48,6 +48,12 @@ def _broadcast(run_id: str, event: TraceEvent) -> None:
 # ── App lifespan ───────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load secrets from Key Vault first (no-op when AZURE_KEY_VAULT_URL is unset)
+    # so telemetry/model/search/cosmos all see the resolved secrets.
+    from config.key_vault import load_key_vault_secrets
+    kv = load_key_vault_secrets()
+    if kv.get("enabled"):
+        logger.info("Key Vault: %d secret(s) loaded", kv.get("loaded", 0))
     setup_telemetry()
     logger.info("EnterpriseCertIQ starting", backend=s.model_backend.value)
     yield
@@ -594,6 +600,7 @@ async def health():
         },
         "content_safety": content_safety_mode(),
         "llm_cache": llm_cache.stats(),
+        "key_vault": "configured" if s.azure_key_vault_url else "off",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -97,6 +97,13 @@ class Settings(BaseSettings):
     # From Azure portal: Application Insights → Connection String
     applicationinsights_connection_string: str = ""
 
+    # ── Azure Key Vault (secret store) ────────────────────────────────
+    # When set, the backend loads secrets from this vault at startup and
+    # overrides the matching settings (KV is the source of truth in cloud).
+    # Empty (default) → secrets come from env/.env as before. Auth uses
+    # DefaultAzureCredential (az login locally / managed identity in Azure).
+    azure_key_vault_url: str = ""  # e.g. https://enterprisecertiq-kv.vault.azure.net
+
     # ── Deterministic agent fallback (3rd tier) ───────────────────────
     # auto (default): if a model call fails, the agent falls back to a
     #                 deterministic builder so the pipeline never breaks.
