@@ -22,6 +22,12 @@ Azure mode (FABRIC_IQ_ENDPOINT set):
     Would query a Microsoft Fabric semantic model / OneLake lakehouse.
     Not provisioned in this repo yet — falls back to the local ontology so the
     runtime contract is identical. See docs/azure-ai-foundry-migration.md Phase 5.
+
+Multi-account note: Fabric can live in a *different* Azure account/tenant than Foundry.
+When the Azure data binding is built it should authenticate with
+`backend.core.azure_credentials.get_service_credential("fabric")`, which returns a
+ClientSecretCredential scoped to FABRIC_TENANT_ID/CLIENT_ID/CLIENT_SECRET (its own
+account) or DefaultAzureCredential. See docs/multi-account-azure.md.
 """
 from __future__ import annotations
 

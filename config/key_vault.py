@@ -47,16 +47,17 @@ def load_key_vault_secrets() -> dict:
         return {"enabled": False, "loaded": 0}
 
     try:
-        from azure.identity import DefaultAzureCredential
         from azure.keyvault.secrets import SecretClient
+        from backend.core.azure_credentials import get_service_credential
     except ImportError:
         logger.warning("Key Vault: azure-keyvault-secrets not installed; "
                        "run `pip install -r requirements.azure.txt`")
         return {"enabled": True, "loaded": 0, "error": "sdk_missing"}
 
     try:
+        # Uses a dedicated SPN if keyvault_* settings are set, else DefaultAzureCredential.
         client = SecretClient(vault_url=s.azure_key_vault_url,
-                              credential=DefaultAzureCredential())
+                              credential=get_service_credential("keyvault"))
     except Exception as e:
         logger.warning("Key Vault: could not init client for %s: %s", s.azure_key_vault_url, e)
         return {"enabled": True, "loaded": 0, "error": str(e)}

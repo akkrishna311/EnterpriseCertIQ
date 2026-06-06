@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     #        Not provisioned in this repo yet — see Phase 5 of the migration doc.
     fabric_iq_endpoint: str = "local"
     fabric_iq_workspace: str = ""  # Fabric workspace / lakehouse name (Azure mode)
+    # Fabric can live in a DIFFERENT Azure account/tenant than Foundry. Give it its
+    # own service principal (Entra app) — Fabric is Entra-auth, not key-auth. When
+    # all three are set, the Fabric IQ client uses a ClientSecretCredential scoped to
+    # that tenant; otherwise it falls back to DefaultAzureCredential.
+    fabric_tenant_id: str = ""
+    fabric_client_id: str = ""
+    fabric_client_secret: str = ""
 
     # ── MCP ───────────────────────────────────────────────────────────
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
