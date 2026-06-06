@@ -68,14 +68,14 @@ export default function CriticVsPlanView({ objections, planSummary }: Props) {
 
       {objections.length === 0 ? (
         <div className="text-center text-gray-400 py-8 text-sm">
-          No Critic objections yet. Run a workflow to see the Critic attack the plan.
+          No plan review notes yet. Build your plan to see feedback and recommendations.
         </div>
       ) : (
         <>
           {red.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">
-                🔴 Unresolved — High Risk ({red.length})
+                🔴 Needs Attention — High Priority ({red.length})
               </h4>
               <div className="space-y-2">
                 {red.map((o, index) => <ObjectionCard key={`${o.objection_id}-${index}`} obj={o} />)}
@@ -86,7 +86,7 @@ export default function CriticVsPlanView({ objections, planSummary }: Props) {
           {amber.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
-                🟡 Unresolved — Medium Risk ({amber.length})
+                🟡 Needs Attention — Medium Priority ({amber.length})
               </h4>
               <div className="space-y-2">
                 {amber.map((o, index) => <ObjectionCard key={`${o.objection_id}-${index}`} obj={o} />)}

@@ -58,7 +58,7 @@ def setup_telemetry() -> None:
 
 
 def _attach_exporter(provider) -> None:
-    from config.settings import get_settings, ModelBackend
+    from config.settings import get_settings
     s = get_settings()
 
     if not s.enable_telemetry:
@@ -66,7 +66,7 @@ def _attach_exporter(provider) -> None:
         logger.debug("Telemetry: no exporter (ENABLE_TELEMETRY=false)")
         return
 
-    if s.model_backend == ModelBackend.AZURE_FOUNDRY and s.applicationinsights_connection_string:
+    if s.applicationinsights_connection_string:
         try:
             from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
             from opentelemetry.sdk.trace.export import BatchSpanProcessor

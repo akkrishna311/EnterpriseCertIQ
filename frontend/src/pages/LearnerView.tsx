@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2 } from 'lucide-react'
-import { api, streamEvents, type TraceEvent, type Forecast, type MasteryGrid } from '../api/client'
+import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { api, streamEvents, type TraceEvent, type AssessmentResult, type Forecast, type MasteryGrid, type ProgressSnapshot } from '../api/client'
 import ReasoningPanel from '../components/ReasoningPanel'
 import CriticVsPlanView from '../components/CriticVsPlanView'
 import DeviationGraph from '../components/DeviationGraph'
+import AssessmentHistoryChart from '../components/AssessmentHistoryChart'
 import DomainMasteryChart from '../components/DomainMasteryChart'
 import ServiceHeatmap from '../components/ServiceHeatmap'
 import PassThresholdGauge from '../components/PassThresholdGauge'
@@ -30,12 +32,12 @@ function mergeObjections(existing: any[], incoming: any[]): any[] {
 type TabKey = 'reasoning' | 'plan' | 'critic' | 'progress' | 'readiness' | 'assessment'
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'reasoning', label: 'Reasoning', icon: <Zap size={14} /> },
+  { key: 'reasoning', label: 'Journey Trace', icon: <Zap size={14} /> },
   { key: 'plan', label: 'Study Plan', icon: <ClipboardList size={14} /> },
-  { key: 'critic', label: 'Critic vs Plan', icon: <Target size={14} /> },
+  { key: 'critic', label: 'Plan Review', icon: <Target size={14} /> },
   { key: 'progress', label: 'Progress', icon: <BookOpen size={14} /> },
-  { key: 'readiness', label: 'Readiness', icon: <Target size={14} /> },
-  { key: 'assessment', label: 'Mock Exam', icon: <BookOpen size={14} /> },
+  { key: 'readiness', label: 'Exam Readiness', icon: <Target size={14} /> },
+  { key: 'assessment', label: 'Practice Exam', icon: <BookOpen size={14} /> },
 ]
 
 const DIFFICULTIES = ['Mixed', 'Easy', 'Medium', 'Hard'] as const
@@ -48,11 +50,12 @@ const DIFF_BADGE: Record<string, string> = {
 }
 
 export default function LearnerView() {
-  const [selectedLearner, setSelectedLearner] = useState('L-1004')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [selectedLearner, setSelectedLearner] = useState(searchParams.get('learner') ?? 'L-1004')
   const [runId, setRunId] = useState<string>()
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState<TraceEvent[]>([])
-  const [activeTab, setActiveTab] = useState<TabKey>('reasoning')
+  const [activeTab, setActiveTab] = useState<TabKey>((searchParams.get('tab') as TabKey) ?? 'reasoning')
   const [planId, setPlanId] = useState<string>()
   const [planData, setPlanData] = useState<StudyPlan>()
   const [planApproved, setPlanApproved] = useState(false)
@@ -63,26 +66,53 @@ export default function LearnerView() {
   const [difficulty, setDifficulty] = useState<Difficulty>('Mixed')
   const [generating, setGenerating] = useState(false)
   const [answers, setAnswers] = useState<Record<string, number>>({})
-  const [examResult, setExamResult] = useState<any>(null)
+  const [examResult, setExamResult] = useState<AssessmentResult | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [actionError, setActionError] = useState<string>()
 
   const { data: learners = [] } = useQuery({ queryKey: ['learners'], queryFn: api.learners })
   const learner = learners.find((l) => l.learner_id === selectedLearner)
 
-  const { data: mastery, refetch: refetchMastery } = useQuery<MasteryGrid>({
+  const { data: mastery, refetch: refetchMastery, isLoading: masteryLoading, isFetching: masteryFetching } = useQuery<MasteryGrid>({
     queryKey: ['mastery', selectedLearner, learner?.cert_target],
     queryFn: () => api.mastery(selectedLearner, learner!.cert_target),
     enabled: !!learner,
   })
-  const { data: forecast, refetch: refetchForecast } = useQuery<Forecast>({
+  const { data: forecast, refetch: refetchForecast, isLoading: forecastLoading, isFetching: forecastFetching } = useQuery<Forecast>({
     queryKey: ['forecast', selectedLearner, learner?.cert_target],
     queryFn: () => api.forecast(selectedLearner, learner!.cert_target),
     enabled: !!learner,
   })
+  const { data: progressData, refetch: refetchProgress, isLoading: progressLoading, isFetching: progressFetching } = useQuery<ProgressSnapshot>({
+    queryKey: ['progress', selectedLearner, learner?.cert_target],
+    queryFn: () => api.progress(selectedLearner, learner!.cert_target),
+    enabled: !!learner,
+  })
+
+  useEffect(() => {
+    const learnerParam = searchParams.get('learner')
+    const tabParam = searchParams.get('tab') as TabKey | null
+    if (learnerParam && learnerParam !== selectedLearner) {
+      setSelectedLearner(learnerParam)
+    }
+    if (tabParam && TABS.some((tab) => tab.key === tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam)
+    }
+  }, [activeTab, searchParams, selectedLearner])
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    next.set('learner', selectedLearner)
+    next.set('tab', activeTab)
+    if (searchParams.toString() !== next.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }, [activeTab, searchParams, selectedLearner, setSearchParams])
 
   async function handleRun() {
     if (!learner) return
     setRunning(true)
+    setActionError(undefined)
     setEvents([]); setObjections([]); setProgressSeries([]); setReadiness(undefined)
     setPlanId(undefined); setPlanData(undefined); setPlanApproved(false)
     setActiveTab('reasoning')
@@ -131,10 +161,15 @@ export default function LearnerView() {
           stop()
           refetchMastery()
           refetchForecast()
+          refetchProgress()
+          if (evt.type === 'workflow_error') {
+            setActionError(evt.error ?? 'Workflow failed before completion.')
+          }
         }
       })
     } catch (e) {
       setRunning(false)
+      setActionError(e instanceof Error ? e.message : 'Failed to start workflow')
       setEvents([{
         event_id: `${Date.now()}-run-error`, run_id: runId ?? 'pending',
         timestamp: new Date().toISOString(), event_type: 'error',
@@ -146,12 +181,15 @@ export default function LearnerView() {
   async function handleGenerateAssessment() {
     if (!learner) return
     setGenerating(true)
+    setActionError(undefined)
     setExamResult(null)
     setAnswers({})
     try {
       const result = await api.generateAssessment(selectedLearner, learner.cert_target, difficulty)
       setAssessment(result)
       setActiveTab('assessment')
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to generate mock exam')
     } finally {
       setGenerating(false)
     }
@@ -160,18 +198,32 @@ export default function LearnerView() {
   async function handleSubmitExam() {
     if (!assessment || !learner) return
     setSubmitting(true)
+    setActionError(undefined)
     try {
-      const r = await fetch('/api/assessment/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assessment_id: assessment.assessment_id,
-          learner_id: selectedLearner,
-          cert_id: learner.cert_target,
-          answers,
-        }),
+      const result = await api.submitAssessment({
+        assessment_id: assessment.assessment_id,
+        learner_id: selectedLearner,
+        cert_id: learner.cert_target,
+        answers,
       })
-      setExamResult(await r.json())
+      setExamResult(result)
+      setReadiness({
+        kind: result.passed ? 'readiness_advance' : 'readiness_loopback',
+        verdict: result.passed ? 'ready' : 'not_ready',
+        estimated_exam_score: result.forecast?.estimated_exam_score ?? result.estimated_exam_score,
+        pass_threshold: result.pass_threshold,
+        weak_area: result.forecast?.weakest_topic,
+        next_step: result.passed ? 'Plan approved and assessment passed. Learner can continue with the next certification target.' : undefined,
+        message: result.passed
+          ? `Assessment passed (${result.estimated_exam_score}/${result.pass_threshold}). Readiness updated from latest exam evidence.`
+          : `Assessment below threshold (${result.estimated_exam_score}/${result.pass_threshold}). Continue remediation on ${result.forecast?.weakest_topic ?? 'the weakest area'}.`,
+      })
+      setActiveTab('readiness')
+      await refetchForecast()
+      await refetchMastery()
+      await refetchProgress()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Failed to submit mock exam')
     } finally {
       setSubmitting(false)
     }
@@ -179,6 +231,74 @@ export default function LearnerView() {
 
   const totalQ = assessment?.questions?.length ?? 0
   const answeredQ = Object.keys(answers).length
+  const resolvedProgressSeries = progressData?.series?.length ? progressData.series : progressSeries
+  const assessmentAttempts = progressData?.attempts ?? []
+  const assessmentForecast = examResult?.forecast ?? forecast
+  const latestAttempt = assessmentAttempts[assessmentAttempts.length - 1]
+  const readinessScore = assessmentForecast?.estimated_exam_score
+  const readinessGap = assessmentForecast ? Math.max(0, assessmentForecast.pass_threshold - assessmentForecast.estimated_exam_score) : undefined
+  const weakestTopic = assessmentForecast?.weakest_topic?.replace(/_/g, ' ')
+  const readinessBusy = masteryLoading || forecastLoading
+  const readinessRefreshing = masteryFetching || forecastFetching
+  const progressBusy = progressLoading
+  const progressRefreshing = progressFetching
+
+  const nextStep = (() => {
+    if (running) {
+      return {
+        title: 'Workflow is running',
+        detail: 'Stay on the journey trace to watch each planning step complete before reviewing the study plan.',
+        actionLabel: 'Open Journey Trace',
+        action: () => setActiveTab('reasoning' as TabKey),
+      }
+    }
+    if (planId && !planApproved) {
+      return {
+        title: 'Review the draft plan',
+        detail: 'The workflow has produced a study plan. Approve it before treating the path as publishable.',
+        actionLabel: 'Open Study Plan',
+        action: () => setActiveTab('plan' as TabKey),
+      }
+    }
+    if (!assessmentAttempts.length) {
+      return {
+        title: 'Generate a first mock exam',
+        detail: 'You have no scored assessment yet, so readiness is still based on limited evidence.',
+        actionLabel: 'Open Practice Exam',
+        action: () => setActiveTab('assessment' as TabKey),
+      }
+    }
+    if (examResult && !examResult.passed) {
+      return {
+        title: 'Close the weakest gap first',
+        detail: `Review ${weakestTopic ?? 'the weakest topic'} in readiness, then retake the mock exam.`,
+        actionLabel: 'Open Exam Readiness',
+        action: () => setActiveTab('readiness' as TabKey),
+      }
+    }
+    if (readinessGap && readinessGap > 0) {
+      return {
+        title: 'Keep remediating before advancing',
+        detail: `${readinessGap} points remain to threshold. Use the progress and readiness tabs to target the next study block.`,
+        actionLabel: 'Open Progress',
+        action: () => setActiveTab('progress' as TabKey),
+      }
+    }
+    if (assessmentForecast && readinessGap === 0) {
+      return {
+        title: 'You are ready to advance',
+        detail: 'Latest evidence is at or above threshold. Confirm the readiness view, then move to the next certification milestone.',
+        actionLabel: 'Open Exam Readiness',
+        action: () => setActiveTab('readiness' as TabKey),
+      }
+    }
+    return {
+      title: 'Run the learner workflow',
+      detail: 'Start with the reasoning workflow to produce a plan, critic output, and readiness baseline.',
+        actionLabel: 'Open Journey Trace',
+      action: () => setActiveTab('reasoning' as TabKey),
+    }
+  })()
 
   return (
     <div className="flex h-[calc(100vh-52px)] bg-gray-50">
@@ -193,6 +313,7 @@ export default function LearnerView() {
               setEvents([]); setRunId(undefined); setPlanData(undefined)
               setPlanId(undefined); setPlanApproved(false); setObjections([])
               setProgressSeries([]); setAssessment(null); setExamResult(null); setReadiness(undefined)
+              setActionError(undefined); setAnswers({})
             }}
             className="w-full text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
           >
@@ -211,6 +332,50 @@ export default function LearnerView() {
           </div>
         )}
 
+        <div className="p-4 border-b border-gray-100 space-y-3 bg-slate-50/80">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Signal</h3>
+            <p className="mt-1 text-sm font-semibold text-slate-800">
+              {readinessScore ? `${readinessScore} / ${assessmentForecast?.pass_threshold ?? 0}` : 'No readiness signal yet'}
+            </p>
+            <p className="text-xs text-slate-500">
+              {assessmentForecast
+                ? readinessGap === 0
+                  ? 'At or above pass threshold based on latest evidence.'
+                  : `${readinessGap} points below current threshold.`
+                : 'Run workflow or complete a mock exam to populate readiness.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
+              <p className="text-slate-400">Latest mock</p>
+              <p className="font-semibold text-slate-800">{latestAttempt ? `${latestAttempt.score_pct}%` : 'No attempts'}</p>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
+              <p className="text-slate-400">Attempts</p>
+              <p className="font-semibold text-slate-800">{assessmentAttempts.length}</p>
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs">
+            <p className="text-slate-400">Weakest topic</p>
+            <p className="font-medium text-slate-800">{weakestTopic || 'Need more evidence'}</p>
+          </div>
+          <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3 text-xs space-y-2">
+            <div>
+              <p className="font-semibold text-blue-900">Suggested next step</p>
+              <p className="mt-1 text-blue-800">{nextStep.title}</p>
+              <p className="mt-1 text-blue-700">{nextStep.detail}</p>
+            </div>
+            <button
+              type="button"
+              onClick={nextStep.action}
+              className="w-full rounded-md bg-white px-2.5 py-2 text-xs font-medium text-blue-700 border border-blue-200 hover:bg-blue-100 transition"
+            >
+              {nextStep.actionLabel}
+            </button>
+          </div>
+        </div>
+
         <div className="p-4 space-y-3">
           <button
             onClick={handleRun}
@@ -218,12 +383,12 @@ export default function LearnerView() {
             className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm px-3 py-2 rounded-md font-medium disabled:opacity-50 transition"
           >
             {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            {running ? 'Running…' : 'Run Workflow'}
+            {running ? 'Building plan…' : 'Build My Plan'}
           </button>
 
           {/* Mock exam controls */}
           <div className="pt-2 border-t border-gray-100 space-y-2">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Mock Exam Difficulty</label>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Practice Exam Difficulty</label>
             <div className="grid grid-cols-2 gap-1.5">
               {DIFFICULTIES.map((d) => (
                 <button
@@ -245,7 +410,7 @@ export default function LearnerView() {
               className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-900 text-white text-sm px-3 py-2 rounded-md font-medium disabled:opacity-50 transition"
             >
               {generating ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
-              {generating ? 'Generating…' : `Generate ${difficulty} Exam`}
+              {generating ? 'Generating…' : `Generate ${difficulty} Practice Exam`}
             </button>
           </div>
         </div>
@@ -261,7 +426,7 @@ export default function LearnerView() {
               }`}
             >
               {planApproved ? <CheckCircle2 size={14} /> : <ClipboardList size={14} />}
-              {planApproved ? 'Plan Approved' : 'Review & Approve Plan'}
+              {planApproved ? 'Plan Approved' : 'Review Study Plan'}
             </button>
           </div>
         )}
@@ -298,6 +463,16 @@ export default function LearnerView() {
         <div className="flex-1 overflow-auto p-4">
           <AIDisclosureBanner />
 
+          {actionError && (
+            <div className="mt-3 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Action failed</p>
+                <p className="text-rose-700">{actionError}</p>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'reasoning' && (
             <div className="h-[calc(100%-40px)] mt-3">
               <ReasoningPanel events={events} runId={runId} />
@@ -315,13 +490,39 @@ export default function LearnerView() {
           )}
 
           {activeTab === 'progress' && (
-            <div className="mt-3 max-w-2xl bg-white rounded-lg border border-gray-200 p-4">
-              <DeviationGraph series={progressSeries} />
+            <div className="mt-3 space-y-4">
+              {progressRefreshing && (
+                <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  <Loader2 size={14} className="animate-spin" />
+                  Refreshing progress from the latest plan and exam evidence.
+                </div>
+              )}
+              {progressBusy && !resolvedProgressSeries.length && !assessmentAttempts.length ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-6 flex items-center gap-3 text-sm text-gray-500">
+                  <Loader2 size={16} className="animate-spin" />
+                  Loading progress and assessment history…
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <DeviationGraph series={resolvedProgressSeries} />
+                  </div>
+                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <AssessmentHistoryChart attempts={assessmentAttempts} />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'readiness' && (
             <div className="mt-3 space-y-4">
+            {readinessRefreshing && (
+              <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                <Loader2 size={14} className="animate-spin" />
+                Refreshing forecast and mastery from the latest evidence.
+              </div>
+            )}
             {readiness && (
               <div className={`rounded-lg border p-4 ${
                 readiness.kind === 'readiness_advance'
@@ -331,27 +532,34 @@ export default function LearnerView() {
                 <div className="flex items-center gap-2 text-sm font-semibold mb-1">
                   <Target size={15} className={readiness.kind === 'readiness_advance' ? 'text-green-700' : 'text-amber-700'} />
                   <span className={readiness.kind === 'readiness_advance' ? 'text-green-800' : 'text-amber-800'}>
-                    Assessment Agent verdict: {readiness.verdict === 'ready' ? 'READY — advance' : readiness.verdict === 'not_ready' ? 'NOT READY — loop back to prep' : 'Insufficient evidence'}
+                    Readiness decision: {readiness.verdict === 'ready' ? 'READY — advance' : readiness.verdict === 'not_ready' ? 'NOT READY — continue prep' : 'Insufficient evidence'}
                   </span>
                 </div>
                 <p className="text-xs text-gray-700">{readiness.message}</p>
                 {readiness.next_step && <p className="text-xs text-gray-600 mt-1"><strong>Next step:</strong> {readiness.next_step}</p>}
               </div>
             )}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Pass-Threshold Forecast</h3>
-                {forecast ? <PassThresholdGauge forecast={forecast} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
+            {readinessBusy && !forecast && !mastery ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-6 flex items-center gap-3 text-sm text-gray-500">
+                <Loader2 size={16} className="animate-spin" />
+                Loading readiness forecast and mastery breakdown…
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Domain Mastery Breakdown</h3>
-                {mastery ? <DomainMasteryChart domains={mastery.domains} passThreshold={mastery.pass_threshold} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Exam Readiness Forecast</h3>
+                  {forecast ? <PassThresholdGauge forecast={forecast} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Domain Mastery Breakdown</h3>
+                  {mastery ? <DomainMasteryChart domains={mastery.domains} passThreshold={mastery.pass_threshold} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
+                </div>
+                <div className="bg-white rounded-lg border border-gray-200 p-4 xl:col-span-2">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Service Confidence Heatmap</h3>
+                  {mastery ? <ServiceHeatmap domains={mastery.domains} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
+                </div>
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 p-4 xl:col-span-2">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Service-Level Heatmap</h3>
-                {mastery ? <ServiceHeatmap domains={mastery.domains} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
-              </div>
-            </div>
+            )}
             </div>
           )}
 
@@ -360,21 +568,21 @@ export default function LearnerView() {
               {!assessment && (
                 <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-400">
                   <BookOpen size={28} className="mb-2 opacity-50" />
-                  <p className="text-sm">Pick a difficulty and click "Generate Exam" in the sidebar.</p>
+                  <p className="text-sm">Pick a difficulty and click "Generate Practice Exam" in the sidebar.</p>
                 </div>
               )}
               {assessment && !examResult && (
                 <>
                   <div className="sticky top-0 bg-gray-50 py-2 flex items-center justify-between border-b border-gray-200 z-10">
                     <div>
-                      <h3 className="font-semibold text-gray-700">{assessment.cert_id} — Mock Exam</h3>
+                      <h3 className="font-semibold text-gray-700">{assessment.cert_id} — Practice Exam</h3>
                       <p className="text-xs text-gray-500">
                         {totalQ} questions · {assessment.time_limit_minutes} min · answered {answeredQ}/{totalQ}
                       </p>
                     </div>
                     <button
                       onClick={handleSubmitExam}
-                      disabled={submitting || answeredQ === 0}
+                      disabled={submitting || answeredQ < totalQ}
                       className="bg-brand-600 hover:bg-brand-700 text-white text-sm px-4 py-1.5 rounded-md disabled:opacity-50 flex items-center gap-1.5"
                     >
                       {submitting && <Loader2 size={13} className="animate-spin" />}
@@ -382,6 +590,11 @@ export default function LearnerView() {
                     </button>
                   </div>
                   <div className="space-y-4">
+                    {answeredQ < totalQ && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Answer all {totalQ} questions before submitting. Current progress: {answeredQ}/{totalQ}.
+                      </div>
+                    )}
                     {assessment.questions.map((q: any, idx: number) => (
                       <div key={q.question_id} className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
                         <div className="flex items-start justify-between gap-3">
@@ -421,12 +634,12 @@ export default function LearnerView() {
                     {' '}Estimated exam score: <strong>{examResult.estimated_exam_score} / 1000</strong> ·
                     {' '}Scored <strong>{examResult.questions_scored}</strong> questions
                   </p>
-                  {forecast && <PassThresholdGauge forecast={forecast} />}
+                  {assessmentForecast && <PassThresholdGauge forecast={assessmentForecast} />}
                   <button
-                    onClick={() => { setExamResult(null); setAnswers({}) }}
+                    onClick={() => { setExamResult(null); setAnswers({}); setActiveTab('assessment'); setActionError(undefined) }}
                     className="text-sm text-brand-600 hover:underline"
                   >
-                    ← Retake / review questions
+                    ← Retake or review questions
                   </button>
                   <AIDisclosureBanner message="AI-generated assessment result; not an official exam score." />
                 </div>

@@ -24,6 +24,9 @@ opentelemetry-api>=1.27.0
 opentelemetry-sdk>=1.27.0
 opentelemetry-instrumentation-fastapi>=0.48b0
 
+# PDF report generation (learner readiness + manager handoff brief)
+reportlab>=4.0.0
+
 # Utilities
 python-multipart==0.0.12
 sse-starlette==2.1.3

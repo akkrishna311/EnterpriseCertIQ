@@ -4,14 +4,17 @@ Middleware pipeline — applied to every agent result before it leaves the syste
 Guards (in order):
   1. pii_redaction   — strip synthetic IDs that look like real names
   2. citation_gate   — drop uncited assertions
-  3. safety          — flag/replace harmful output
-  4. fairness        — scan for bias patterns in generated content
+  3. content_safety  — Azure AI Content Safety (live) or regex fallback
+  4. safety          — flag/replace harmful output (legacy keyword guard)
+  5. fairness        — scan for bias patterns in generated content
 """
 from __future__ import annotations
 
 import logging
 import re
 from typing import Optional
+
+from backend.middleware.content_safety import analyze_text, content_safety_mode
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +111,13 @@ def apply_pipeline(content: str, agent_name: str = "") -> tuple[str, list[str]]:
 
     content = redact_pii(content)
     content = drop_uncited_claims(content, agent_name)
+
+    # Azure AI Content Safety (live API when configured, regex fallback otherwise).
+    cs_safe, cs_reason, cs_details = analyze_text(content)
+    if not cs_safe:
+        logger.warning("[content-safety:%s] %s", cs_details.get("mode"), cs_reason)
+        warnings.append(f"content_safety_block:{cs_details.get('mode')}")
+        content = "[Content withheld by Azure AI Content Safety guardrail]"
 
     safe, content = check_safety(content)
     if not safe:

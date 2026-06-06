@@ -1,6 +1,6 @@
 """
 EnterpriseCertIQ own MCP server (FastMCP).
-Exposes 9 typed tools consumed by the 6 agents.
+Exposes 10 typed tools (incl. Fabric IQ semantic queries) consumed by the agents.
 
 Run standalone:
     python -m backend.mcp_server.server
@@ -82,12 +82,45 @@ def _normalize_curated_topics(raw_topics) -> list[dict]:
     return normalized_topics
 
 
-QUESTION_STEMS = [
-    "[Synthetic] For {cert_id} in {domain}, which implementation best fits {service}?",
-    "[Synthetic] A developer is working on {service} within {domain} for {cert_id}. What should they choose?",
-    "[Synthetic] Which approach aligns with Microsoft guidance for {service} under {domain} in {cert_id}?",
-    "[Synthetic] When designing {service} for the {domain} objective in {cert_id}, what is the recommended action?",
-]
+QUESTION_STEMS_BY_DIFFICULTY = {
+    "Easy": [
+        "[Synthetic] For {cert_id} in {domain}, which implementation best fits {service}?",
+        "[Synthetic] Which option best matches the Microsoft recommendation for {service} in {domain}?",
+        "[Synthetic] A learner is reviewing {service} for {cert_id}. Which choice is correct for the {domain} objective?",
+    ],
+    "Medium": [
+        "[Synthetic] A developer is working on {service} within {domain} for {cert_id}. What should they choose?",
+        "[Synthetic] Which approach aligns with Microsoft guidance for {service} under {domain} in {cert_id}?",
+        "[Synthetic] When designing {service} for the {domain} objective in {cert_id}, what is the recommended action?",
+    ],
+    "Hard": [
+        "[Synthetic] A production workload in {service} is failing a key {domain} requirement for {cert_id}. Which remediation is most appropriate?",
+        "[Synthetic] Which design decision for {service} best satisfies the trade-offs emphasized in {domain} for {cert_id}?",
+        "[Synthetic] You must review an implementation of {service} against Microsoft guidance for {domain} in {cert_id}. What is the strongest correction?",
+    ],
+}
+
+
+def _assessment_difficulty_label(raw_difficulty: Optional[str], question_index: int) -> str:
+    if raw_difficulty and raw_difficulty.capitalize() in QUESTION_STEMS_BY_DIFFICULTY:
+        return raw_difficulty.capitalize()
+    return ["Easy", "Medium", "Hard"][question_index % 3]
+
+
+def _service_for_difficulty(services: list[str], difficulty: str, question_index: int) -> str:
+    if not services:
+        return "General"
+
+    if difficulty == "Easy":
+        offset = 0
+    elif difficulty == "Medium":
+        offset = len(services) // 2
+    elif difficulty == "Hard":
+        offset = max(len(services) - 1, 0)
+    else:
+        offset = question_index
+
+    return services[(question_index + offset) % len(services)]
 
 
 # ── Tool input schemas ─────────────────────────────────────────────────────
@@ -132,6 +165,8 @@ class ForecastInput(BaseModel):
     cert_id: str
     plan_id: str
     evidence_json: str
+    observed_exam_score: Optional[int] = None
+    observed_score_pct: Optional[float] = None
 
 
 class ProgressSeriesInput(BaseModel):
@@ -150,6 +185,23 @@ class ServiceHeatmapInput(BaseModel):
     learner_id: str
     cert_id: str
     evidence_json: str
+
+
+class FabricIQInput(BaseModel):
+    """Query the Fabric IQ semantic layer.
+
+    query_type one of:
+      readiness_semantics    — interpret evidence vs domain thresholds (needs cert_id + evidence_json)
+      domain_thresholds      — per-domain weight/leverage/minimum-mastery (needs cert_id)
+      role_certification_map — role → recommended/next certification (optional role)
+      cohort_benchmark       — cohort outcome aggregates (optional cert_id)
+      intervention_effect    — cohort-derived lift of protecting capacity (optional cert_id)
+      ontology               — entities, relationships, and rules (transparency)
+    """
+    query_type: str
+    cert_id: Optional[str] = None
+    role: Optional[str] = None
+    evidence_json: Optional[str] = None
 
 
 # ── Tools ──────────────────────────────────────────────────────────────────
@@ -293,12 +345,10 @@ async def generate_assessment(args: AssessmentInput) -> dict:
         questions_for_domain = max(1, round(args.question_count * (domain.get("weight_pct", 100 / max(len(domains), 1)) / 100)))
 
         for i in range(questions_for_domain):
-            service = services[i % max(len(services), 1)]
-            if args.difficulty and args.difficulty.capitalize() in ("Easy", "Medium", "Hard"):
-                difficulty = args.difficulty.capitalize()
-            else:
-                difficulty = ["Easy", "Medium", "Hard"][question_index % 3]
-            base_stem = QUESTION_STEMS[question_index % len(QUESTION_STEMS)].format(
+            difficulty = _assessment_difficulty_label(args.difficulty, question_index)
+            service = _service_for_difficulty(services, difficulty, question_index)
+            stems = QUESTION_STEMS_BY_DIFFICULTY.get(difficulty, QUESTION_STEMS_BY_DIFFICULTY["Medium"])
+            base_stem = stems[question_index % len(stems)].format(
                 cert_id=args.cert_id,
                 domain=domain["name"],
                 service=service,
@@ -377,19 +427,20 @@ async def compute_readiness_forecast(args: ForecastInput) -> dict:
         }
 
     scores = {k: v for k, v in evidence.items() if isinstance(v, (int, float))}
+    pass_threshold = 700
     if not scores:
         pass_prob = 0.5
         weakest = "unknown"
         min_hours = 5.0
+        estimated_score = args.observed_exam_score if args.observed_exam_score is not None else 500
     else:
         avg_score = sum(scores.values()) / len(scores)
-        pass_prob = min(0.95, max(0.05, (avg_score - 0.3) / 0.5))
         weakest = min(scores, key=scores.get)
-        min_hours = max(0.0, round((0.75 - avg_score) * 30, 1))
+        estimated_score = args.observed_exam_score if args.observed_exam_score is not None else int(round(avg_score * 1000))
+        pass_prob = min(0.99, max(0.05, estimated_score / 1000))
+        min_hours = round(max(0, pass_threshold - estimated_score) / 32, 1)
 
     ci_width = 0.12 if len(scores) >= 4 else 0.20
-    estimated_score = int(pass_prob * 1000)
-    pass_threshold = 700
 
     return {
         "learner_id": args.learner_id,
@@ -466,6 +517,8 @@ async def compute_domain_mastery(args: DomainMasteryInput) -> dict:
         evidence = json.loads(args.evidence_json)
     except Exception:
         evidence = {}
+    if not isinstance(evidence, dict):
+        evidence = {}
 
     domain_mastery = []
     for d in domains_config:
@@ -517,6 +570,35 @@ async def compute_service_heatmap(args: ServiceHeatmapInput) -> dict:
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "rows": mastery.get("domains", []),
     }
+
+
+@mcp.tool()
+async def fabric_iq_semantics(args: FabricIQInput) -> dict:
+    """Query the Fabric IQ semantic layer for business meaning over the
+    enterprise-learning ontology (roles, certifications, domains, thresholds,
+    cohort outcomes). Returns semantic interpretation, not raw rows."""
+    from backend.iq.fabric_iq import get_fabric_iq
+    fiq = get_fabric_iq()
+    qt = (args.query_type or "").strip().lower()
+
+    if qt == "domain_thresholds":
+        return {"query_type": qt, "cert_id": args.cert_id,
+                "domains": fiq.get_domain_thresholds(args.cert_id or "")}
+    if qt == "role_certification_map":
+        return {"query_type": qt, "map": fiq.get_role_certification_map(args.role)}
+    if qt == "cohort_benchmark":
+        return {"query_type": qt, **fiq.get_cohort_benchmark(args.cert_id)}
+    if qt == "intervention_effect":
+        return {"query_type": qt, **fiq.get_intervention_effectiveness(args.cert_id)}
+    if qt == "ontology":
+        return {"query_type": qt, **fiq.describe_ontology()}
+    # default: readiness_semantics
+    try:
+        evidence = json.loads(args.evidence_json) if args.evidence_json else {}
+    except Exception:
+        evidence = {}
+    return {"query_type": "readiness_semantics",
+            **fiq.get_readiness_semantics(args.cert_id or "", evidence)}
 
 
 if __name__ == "__main__":

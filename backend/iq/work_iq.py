@@ -103,11 +103,45 @@ class WorkIQClient:
         }
 
 
-_client: Optional[WorkIQClient] = None
+class _ResilientGraphWorkIQ:
+    """Graph-backed Work IQ that degrades to synthetic per-call on any failure.
+
+    Keeps demos and CI safe: if a token/mailbox is missing or Graph errors, each
+    call quietly returns the synthetic signal instead of breaking the pipeline.
+    """
+
+    def __init__(self):
+        from backend.iq.work_iq_graph import GraphWorkIQClient
+        self._graph = GraphWorkIQClient()
+        self._synthetic = WorkIQClient()
+
+    async def get_work_context(self, learner: LearnerProfile) -> "WorkContext":
+        from backend.iq.work_iq_graph import WorkIQGraphError
+        try:
+            return await self._graph.get_work_context(learner)
+        except WorkIQGraphError as e:
+            logger.warning("Work IQ Graph fallback → synthetic for %s: %s", learner.learner_id, e)
+            return await self._synthetic.get_work_context(learner)
+
+    async def get_team_context(self, team_id: str, learners: list[LearnerProfile]) -> dict:
+        from backend.iq.work_iq_graph import WorkIQGraphError
+        try:
+            return await self._graph.get_team_context(team_id, learners)
+        except WorkIQGraphError as e:
+            logger.warning("Work IQ Graph team fallback → synthetic for %s: %s", team_id, e)
+            return await self._synthetic.get_team_context(team_id, learners)
 
 
-def get_work_iq() -> WorkIQClient:
+_client = None
+
+
+def get_work_iq():
+    """Return the active Work IQ client (synthetic by default, Graph when configured)."""
     global _client
     if _client is None:
-        _client = WorkIQClient()
+        if get_settings().work_iq_source == "graph":
+            logger.info("Work IQ source: Microsoft Graph (Calendars.Read), synthetic fallback")
+            _client = _ResilientGraphWorkIQ()
+        else:
+            _client = WorkIQClient()
     return _client

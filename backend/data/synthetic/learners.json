@@ -122,5 +122,72 @@
       "cicd": 0.65,
       "data": 0.60
     }
+  },
+  {
+    "learner_id": "L-1013",
+    "display_name": "Learner-Zeta",
+    "role": "AI Engineer",
+    "team_id": "TEAM-C",
+    "cert_target": "AI-102",
+    "deadline": "2026-09-30",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 19,
+      "focus_hours_per_week": 12,
+      "preferred_learning_slot": "Morning",
+      "upcoming_milestones": ["model_launch_2026-08-20"],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": null
+  },
+  {
+    "learner_id": "L-1014",
+    "display_name": "Learner-Eta",
+    "role": "Data Scientist",
+    "team_id": "TEAM-C",
+    "cert_target": "DP-100",
+    "deadline": "2026-10-15",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 14,
+      "focus_hours_per_week": 16,
+      "preferred_learning_slot": "Afternoon",
+      "upcoming_milestones": [],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": {
+      "compute": 0.62,
+      "networking": 0.40,
+      "storage": 0.66,
+      "security": 0.48,
+      "monitoring": 0.55,
+      "cicd": 0.44,
+      "data": 0.71
+    }
+  },
+  {
+    "learner_id": "L-1015",
+    "display_name": "Learner-Theta",
+    "role": "AI Practitioner",
+    "team_id": "TEAM-C",
+    "cert_target": "AI-900",
+    "deadline": "2026-07-31",
+    "prior_attempts": [],
+    "work_iq_signals": {
+      "meeting_hours_per_week": 27,
+      "focus_hours_per_week": 8,
+      "preferred_learning_slot": "Evening",
+      "upcoming_milestones": ["onboarding_2026-07-05"],
+      "available_study_hours_per_week": 0
+    },
+    "prior_assessment_evidence": {
+      "compute": 0.58,
+      "networking": 0.50,
+      "storage": 0.52,
+      "security": 0.60,
+      "monitoring": 0.49,
+      "cicd": 0.46,
+      "data": 0.57
+    }
   }
 ]

@@ -14,5 +14,13 @@
     "members": ["L-1006", "L-1008"],
     "cert_targets": ["DP-203", "AZ-305"],
     "quarter_goal": "Upskill data engineers on Azure Data platform; architect to achieve AZ-305"
+  },
+  {
+    "team_id": "TEAM-C",
+    "team_name": "Applied AI",
+    "manager_id": "MGR-003",
+    "members": ["L-1013", "L-1014", "L-1015"],
+    "cert_targets": ["AI-102", "DP-100", "AI-900"],
+    "quarter_goal": "Build applied-AI certification depth: AI Engineer, Data Scientist, and AI fundamentals"
   }
 ]

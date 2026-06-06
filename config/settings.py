@@ -58,9 +58,32 @@ class Settings(BaseSettings):
 
     # ── Foundry IQ ────────────────────────────────────────────────────
     # Local: keyword search over ./backend/data/documents/
-    # Azure: set to your Foundry project endpoint (same as azure_ai_project_endpoint)
+    # Azure: set to your Azure AI Search endpoint
     foundry_iq_endpoint: str = "local"
     foundry_iq_index_name: str = "cert-knowledge-base"
+    # Dedicated Search admin key — separate from the Foundry model key
+    azure_search_key: str = ""
+
+    # ── Work IQ source ────────────────────────────────────────────────
+    # synthetic (default): work signals from learners.json
+    # graph:               real Microsoft 365 calendar via Microsoft Graph
+    #                      (Calendars.Read). Work IQ proper needs an M365 Copilot
+    #                      add-on + preview enrolment; Graph delivers the same
+    #                      WorkIQSignals on any M365 license. Falls back to
+    #                      synthetic if a token/UPN is unavailable at call time.
+    work_iq_source: str = "synthetic"  # synthetic | graph
+    graph_tenant_id: str = ""
+    graph_client_id: str = ""
+    graph_access_token: str = ""        # optional: paste a token to skip device-code
+    graph_default_upn: str = "me"       # mailbox to read when no per-learner mapping
+    graph_learner_upn_map: str = ""     # optional JSON: {"L-1004": "alex@contoso.com"}
+
+    # ── Fabric IQ (semantic layer) ────────────────────────────────────
+    # Local: in-memory ontology built from ./backend/data/synthetic/*.json
+    # Azure: point at a Microsoft Fabric semantic model / OneLake endpoint.
+    #        Not provisioned in this repo yet — see Phase 5 of the migration doc.
+    fabric_iq_endpoint: str = "local"
+    fabric_iq_workspace: str = ""  # Fabric workspace / lakehouse name (Azure mode)
 
     # ── MCP ───────────────────────────────────────────────────────────
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
@@ -73,6 +96,29 @@ class Settings(BaseSettings):
     enable_telemetry: bool = False
     # From Azure portal: Application Insights → Connection String
     applicationinsights_connection_string: str = ""
+
+    # ── Deterministic agent fallback (3rd tier) ───────────────────────
+    # auto (default): if a model call fails, the agent falls back to a
+    #                 deterministic builder so the pipeline never breaks.
+    # force:          skip the model entirely — fully deterministic demo mode
+    #                 (zero credentials, instant, reproducible).
+    # off:            never fall back; surface model errors.
+    agent_fallback_mode: str = "auto"  # auto | force | off
+
+    # ── LLM response cache ────────────────────────────────────────────
+    # SHA-256 keyed cache over (model, messages, tools, temperature). A cache
+    # hit skips the model call entirely — cuts cost + latency and makes demos
+    # instant + deterministic. Disable for a true cold run.
+    enable_llm_cache: bool = True
+    llm_cache_max_entries: int = 2000
+
+    # ── Azure AI Content Safety (RAI guardrail) ───────────────────────
+    # When endpoint + key are set, free-text agent output is screened by the
+    # live Content Safety API (Hate/SelfHarm/Sexual/Violence). severity >=
+    # threshold → BLOCK. Falls back to the regex guard when unconfigured.
+    azure_content_safety_endpoint: str = ""
+    azure_content_safety_key: str = ""
+    azure_content_safety_threshold: int = 2  # 0..6 (Azure severity scale)
 
     # ── Derived helpers ───────────────────────────────────────────────
     @computed_field

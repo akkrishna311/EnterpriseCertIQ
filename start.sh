@@ -24,6 +24,19 @@ info()    { echo -e "${BLUE}[info]${NC}  $*"; }
 success() { echo -e "${GREEN}[ok]${NC}    $*"; }
 warn()    { echo -e "${YELLOW}[warn]${NC}  $*"; }
 error()   { echo -e "${RED}[error]${NC} $*"; exit 1; }
+have_command() { command -v "$1" >/dev/null 2>&1; }
+
+pick_python() {
+  if have_command python3; then
+    echo python3
+    return
+  fi
+  if have_command python; then
+    echo python
+    return
+  fi
+  error "Python 3.11+ not found. Install Python and retry."
+}
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 SKIP_SETUP=false
@@ -39,6 +52,7 @@ cd "$SCRIPT_DIR"
 
 VENV="$SCRIPT_DIR/.venv"
 PIDS_FILE="$SCRIPT_DIR/.running_pids"
+PYTHON_BIN="$(pick_python)"
 
 # ── Cleanup on exit ───────────────────────────────────────────────────────────
 cleanup() {
@@ -90,6 +104,22 @@ wait_for_foundry_local() {
   return 1
 }
 
+wait_for_http() {
+  local url="$1"
+  for _ in {1..20}; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+port_in_use() {
+  local port="$1"
+  lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+}
+
 if [[ "${MODEL_BACKEND:-foundry_local}" == "azure_foundry" ]]; then
   REQ_FILE="requirements.azure.txt"
 fi
@@ -104,7 +134,7 @@ info "Step 2 — Python environment"
 if [[ "$SKIP_SETUP" == false ]]; then
   if [[ ! -d "$VENV" ]]; then
     info "Creating virtual environment at .venv …"
-    python3 -m venv "$VENV"
+    "$PYTHON_BIN" -m venv "$VENV"
   fi
 
   # shellcheck disable=SC1091
@@ -129,8 +159,8 @@ info "Step 3 — Foundry Local model"
 if [[ "${MODEL_BACKEND:-foundry_local}" == "foundry_local" ]]; then
   if [[ "$SKIP_MODEL" == false ]]; then
     info "Downloading/checking model '$MODEL_ALIAS' via Foundry Local SDK …"
-    python3 scripts/setup_foundry.py --alias "$MODEL_ALIAS" || {
-      error "Model setup failed. Run: python3 scripts/setup_foundry.py --alias $MODEL_ALIAS"
+    "$PYTHON_BIN" scripts/setup_foundry.py --alias "$MODEL_ALIAS" || {
+      error "Model setup failed. Run: $PYTHON_BIN scripts/setup_foundry.py --alias $MODEL_ALIAS"
     }
   else
     warn "--skip-model: assuming model '$MODEL_ALIAS' is already loaded."
@@ -140,7 +170,7 @@ if [[ "${MODEL_BACKEND:-foundry_local}" == "foundry_local" ]]; then
     success "Foundry Local endpoint ready  → $FOUNDRY_LOCAL_ENDPOINT"
   else
     info "Starting Foundry Local web service on $FOUNDRY_LOCAL_ENDPOINT …"
-    python3 scripts/setup_foundry.py --alias "$MODEL_ALIAS" --serve --endpoint "$FOUNDRY_LOCAL_ENDPOINT" &
+    "$PYTHON_BIN" scripts/setup_foundry.py --alias "$MODEL_ALIAS" --serve --endpoint "$FOUNDRY_LOCAL_ENDPOINT" &
     FOUNDRY_PID=$!
     echo "$FOUNDRY_PID" >> "$PIDS_FILE"
 
@@ -166,16 +196,18 @@ success "backend/data/store/ ready"
 # STEP 5 — Start own MCP server
 # ─────────────────────────────────────────────────────────────────────────────
 info "Step 5 — Starting own MCP server on port $OWN_MCP_PORT …"
-python3 -m backend.mcp_server.server &
-MCP_PID=$!
-echo "$MCP_PID" >> "$PIDS_FILE"
-
-# Wait for MCP server (give it time to start; health check is permissive)
-sleep 3
-if kill -0 "$MCP_PID" 2>/dev/null; then
-  success "MCP server started (PID $MCP_PID) → http://localhost:$OWN_MCP_PORT"
+if port_in_use "$OWN_MCP_PORT"; then
+  success "MCP server already listening  → http://localhost:$OWN_MCP_PORT"
 else
-  warn "MCP server process exited unexpectedly — check output above."
+  "$PYTHON_BIN" -m backend.mcp_server.server &
+  MCP_PID=$!
+  echo "$MCP_PID" >> "$PIDS_FILE"
+  sleep 3
+  if kill -0 "$MCP_PID" 2>/dev/null; then
+    success "MCP server started (PID $MCP_PID) → http://localhost:$OWN_MCP_PORT"
+  else
+    warn "MCP server process exited unexpectedly — check output above."
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,21 +225,21 @@ if [[ "$BACKEND_RELOAD" == "true" ]]; then
   UVICORN_ARGS+=(--reload)
 fi
 
-uvicorn "${UVICORN_ARGS[@]}" &
-API_PID=$!
-echo "$API_PID" >> "$PIDS_FILE"
+if wait_for_http "http://localhost:$BACKEND_PORT/health"; then
+  success "Backend API already healthy  → http://localhost:$BACKEND_PORT"
+elif port_in_use "$BACKEND_PORT"; then
+  error "Port $BACKEND_PORT is already in use but /health did not respond. Clear the process on that port or change BACKEND_PORT."
+else
+  uvicorn "${UVICORN_ARGS[@]}" &
+  API_PID=$!
+  echo "$API_PID" >> "$PIDS_FILE"
 
-# Wait for API to be ready
-for i in {1..20}; do
-  if curl -s "http://localhost:$BACKEND_PORT/health" >/dev/null 2>&1; then
+  if wait_for_http "http://localhost:$BACKEND_PORT/health"; then
     success "Backend API up  → http://localhost:$BACKEND_PORT"
-    break
-  fi
-  sleep 1
-  if [[ $i -eq 20 ]]; then
+  else
     warn "Backend did not respond in 20s — check logs above."
   fi
-done
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 7 — Frontend (npm install + dev server)
@@ -217,7 +249,7 @@ info "Step 7 — Frontend"
 cd frontend
 
 if [[ "$SKIP_SETUP" == false ]]; then
-  if ! command -v node >/dev/null 2>&1; then
+  if ! have_command node; then
     error "Node.js not found. Install Node.js 20+ from https://nodejs.org"
   fi
   info "Installing frontend dependencies …"
@@ -226,19 +258,23 @@ if [[ "$SKIP_SETUP" == false ]]; then
 fi
 
 info "Starting React dev server on port $FRONTEND_PORT …"
-npm run dev -- --port "$FRONTEND_PORT" &
-FRONTEND_PID=$!
-cd ..
-echo "$FRONTEND_PID" >> "$PIDS_FILE"
+if wait_for_http "http://localhost:$FRONTEND_PORT/"; then
+  success "Frontend already healthy  → http://localhost:$FRONTEND_PORT"
+elif port_in_use "$FRONTEND_PORT"; then
+  cd ..
+  error "Port $FRONTEND_PORT is already in use but the Vite dev server did not respond. Clear the process on that port or change FRONTEND_PORT."
+else
+  npm run dev -- --port "$FRONTEND_PORT" &
+  FRONTEND_PID=$!
+  cd ..
+  echo "$FRONTEND_PID" >> "$PIDS_FILE"
 
-# Wait for frontend
-for i in {1..20}; do
-  if curl -s "http://localhost:$FRONTEND_PORT/" >/dev/null 2>&1; then
+  if wait_for_http "http://localhost:$FRONTEND_PORT/"; then
     success "Frontend up  → http://localhost:$FRONTEND_PORT"
-    break
+  else
+    warn "Frontend did not respond in 20s — check logs above."
   fi
-  sleep 1
-done
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # All systems go

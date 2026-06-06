@@ -15,7 +15,7 @@ from typing import AsyncGenerator, Optional
 import structlog
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from backend.agents.factory import build_agents
@@ -89,6 +89,38 @@ class AssessmentSubmitRequest(BaseModel):
     answers: dict[str, int]
 
 
+class PeerLearningSessionRequest(BaseModel):
+    id: str
+    mentor_id: str
+    learner_id: str
+    cert_id: str
+    focus_domain: str
+    suggested_slot: Optional[str] = None
+    rationale: str
+    owner_id: str = "manager"
+    status: str = "planned"
+    manager_note: str = ""
+
+
+class ManagerInterventionRequest(BaseModel):
+    id: str
+    learner_id: str
+    priority: str
+    reasons: list[str]
+    owner_id: str = "manager"
+    status: str = "planned"
+    manager_note: str = ""
+
+
+class ManagerWhatIfRequest(BaseModel):
+    target_learner_id: str
+    protected_focus_hours: float = 0.0
+    reduced_meeting_hours: float = 0.0
+    targeted_review_hours: float = 0.0
+    peer_mentor_id: Optional[str] = None
+    peer_session_count: int = 1
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _load_learner(learner_id: str) -> LearnerProfile:
@@ -116,16 +148,461 @@ def _load_teams() -> list[dict]:
     return json.loads(path.read_text())
 
 
+def _pass_threshold_for_cert(cert_id: str) -> int:
+    from pathlib import Path
+
+    path = Path(s.data_dir) / "synthetic" / "cert_structures.json"
+    if not path.exists():
+        return 700
+    structures = json.loads(path.read_text())
+    return int(structures.get(cert_id, {}).get("passing_score", 700))
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
+def _normalise_evidence(evidence: dict) -> dict[str, float]:
+    return {
+        key: float(value)
+        for key, value in evidence.items()
+        if isinstance(value, (int, float))
+    }
+
+
+def _evidence_for_manager_summary(learner: LearnerProfile, latest_assessment: Optional[dict]) -> dict:
+    if latest_assessment and isinstance(latest_assessment.get("evidence"), dict):
+        return latest_assessment["evidence"]
+    evidence = learner.prior_assessment_evidence
+    if evidence is None:
+        return {}
+    # prior_assessment_evidence is a Pydantic model — convert to a dict so it
+    # actually feeds readiness/skill-gap (previously dropped → false "insufficient").
+    if hasattr(evidence, "model_dump"):
+        return evidence.model_dump()
+    return evidence if isinstance(evidence, dict) else {}
+
+
+def _average_evidence_score(evidence: dict) -> float:
+    values = [value for value in evidence.values() if isinstance(value, (int, float))]
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def _sorted_strengths(evidence: dict) -> list[tuple[str, float]]:
+    items = [(key, float(value)) for key, value in evidence.items() if isinstance(value, (int, float))]
+    return sorted(items, key=lambda item: item[1], reverse=True)
+
+
+async def _build_manager_peer_pairs(team_id: str, learners: list[LearnerProfile]) -> list[dict]:
+    learner_states = []
+    for learner in learners:
+        latest = await _latest_submitted_assessment(learner.learner_id, learner.cert_target)
+        evidence = _evidence_for_manager_summary(learner, latest)
+        learner_states.append({
+            "learner": learner,
+            "latest": latest,
+            "evidence": evidence,
+            "strengths": _sorted_strengths(evidence),
+            "avg": _average_evidence_score(evidence),
+        })
+
+    pairs: list[dict] = []
+    for state in learner_states:
+        learner = state["learner"]
+        strengths = state["strengths"]
+        if not strengths:
+          continue
+        weakest_area = strengths[-1][0]
+        latest = state["latest"]
+        if latest and latest.get("passed", False):
+            continue
+        needs_support = latest is None or strengths[-1][1] < 0.65
+        if not needs_support:
+            continue
+
+        same_cert_candidates = []
+        for candidate_state in learner_states:
+            candidate = candidate_state["learner"]
+            if candidate.learner_id == learner.learner_id:
+                continue
+            if candidate.cert_target != learner.cert_target:
+                continue
+            candidate_evidence = candidate_state["evidence"]
+            if weakest_area not in candidate_evidence:
+                continue
+            strength_delta = float(candidate_evidence[weakest_area]) - float(state["evidence"].get(weakest_area, 0))
+            if strength_delta < 0.1:
+                continue
+            same_cert_candidates.append((strength_delta, candidate_state))
+
+        if same_cert_candidates:
+            same_cert_candidates.sort(key=lambda item: item[0], reverse=True)
+            mentor_state = same_cert_candidates[0][1]
+            mentor = mentor_state["learner"]
+            mentor_strength = mentor_state["strengths"][0][0] if mentor_state["strengths"] else weakest_area
+            pairs.append({
+                "learner_a": mentor.learner_id,
+                "strength": mentor_strength,
+                "learner_b": learner.learner_id,
+                "gap": weakest_area,
+                "match_type": "same_cert",
+            })
+            continue
+
+        cross_cert_candidates = [candidate_state for candidate_state in learner_states if candidate_state["learner"].learner_id != learner.learner_id]
+        if not cross_cert_candidates:
+            continue
+        cross_cert_candidates.sort(
+            key=lambda candidate_state: (
+                candidate_state["latest"].get("score_pct", -1) if candidate_state["latest"] else -1,
+                candidate_state["avg"],
+                candidate_state["learner"].work_iq_signals.focus_hours_per_week,
+            ),
+            reverse=True,
+        )
+        mentor_state = cross_cert_candidates[0]
+        mentor = mentor_state["learner"]
+        pairs.append({
+            "learner_a": mentor.learner_id,
+            "strength": "study_cadence",
+            "learner_b": learner.learner_id,
+            "gap": "exam_rehearsal",
+            "match_type": "cross_cert",
+        })
+
+    unique_pairs = []
+    seen: set[tuple[str, str, str]] = set()
+    for pair in pairs:
+        key = (pair["learner_a"], pair["learner_b"], pair["gap"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_pairs.append(pair)
+    return unique_pairs
+
+
+async def _build_manager_insight_payload(team_id: str, learners: list[LearnerProfile]) -> dict:
+    from backend.iq.work_iq import get_work_iq
+
+    wiq = get_work_iq()
+    context = await wiq.get_team_context(team_id, learners)
+    latest_assessments = {
+        learner.learner_id: await _latest_submitted_assessment(learner.learner_id, learner.cert_target)
+        for learner in learners
+    }
+
+    readiness_distribution = {"on_track": 0, "at_risk": 0, "insufficient_evidence": 0}
+    low_evidence_learners: list[str] = []
+    below_threshold_learners: list[str] = []
+    no_attempt_learners: list[str] = []
+    for learner in learners:
+        latest = latest_assessments[learner.learner_id]
+        evidence = _evidence_for_manager_summary(learner, latest)
+        if not evidence:
+            readiness_distribution["insufficient_evidence"] += 1
+            low_evidence_learners.append(learner.learner_id)
+            no_attempt_learners.append(learner.learner_id)
+            continue
+
+        avg_evidence = _average_evidence_score(evidence)
+        if latest and latest.get("passed"):
+            readiness_distribution["on_track"] += 1
+        elif latest and latest.get("submitted_at"):
+            readiness_distribution["at_risk"] += 1
+            below_threshold_learners.append(learner.learner_id)
+        elif avg_evidence >= 0.7:
+            readiness_distribution["on_track"] += 1
+        else:
+            readiness_distribution["at_risk"] += 1
+            low_evidence_learners.append(learner.learner_id)
+
+    capacity_conflicts = []
+    for learner in learners:
+        signals = learner.work_iq_signals
+        if signals.meeting_hours_per_week > 25:
+            milestones = ", ".join(signals.upcoming_milestones) if signals.upcoming_milestones else "upcoming delivery work"
+            capacity_conflicts.append(f"{learner.learner_id} has >25 meeting hours and pending milestone pressure from {milestones}.")
+
+    risk_areas = []
+    if context["high_capacity_risk_members"]:
+        risk_areas.append(f"High meeting load is affecting {len(context['high_capacity_risk_members'])} learner(s).")
+    if no_attempt_learners:
+        risk_areas.append(f"{len(no_attempt_learners)} learner(s) still need a fresh mock exam signal.")
+    if below_threshold_learners:
+        risk_areas.append(f"Latest mock attempts are below threshold for {', '.join(below_threshold_learners)}.")
+
+    peer_pairs = await _build_manager_peer_pairs(team_id, learners)
+    manager_actions = []
+    if context["high_capacity_risk_members"]:
+        manager_actions.append("Protect one recurring study block for high-risk learners before the next certification checkpoint.")
+    if below_threshold_learners:
+        manager_actions.append(f"Queue a remediation mock exam for {below_threshold_learners[0]} after targeted review.")
+    if peer_pairs:
+        pair = peer_pairs[0]
+        manager_actions.append(f"Schedule {pair['learner_a']} to coach {pair['learner_b']} on {pair['gap'].replace('_', ' ')} this week.")
+    if not manager_actions:
+        manager_actions.append("Maintain the current study cadence and review progress after the next assessment attempt.")
+
+    summary = (
+        f"Team {team_id} has {readiness_distribution['on_track']} learner(s) on track, "
+        f"{readiness_distribution['at_risk']} at risk, and "
+        f"{readiness_distribution['insufficient_evidence']} with insufficient evidence."
+    )
+
+    # ── Fabric IQ: semantic team skill-gap meaning + cohort benchmarks ──────
+    from backend.iq.fabric_iq import get_fabric_iq
+
+    fiq = get_fabric_iq()
+    evidence_by_learner = {
+        learner.learner_id: _evidence_for_manager_summary(learner, latest_assessments[learner.learner_id])
+        for learner in learners
+    }
+    member_certs = {learner.learner_id: learner.cert_target for learner in learners}
+    skill_gaps = fiq.get_team_skill_gap_summary(
+        team_id, evidence_by_learner, member_certs, team_size=len(learners)
+    )
+    team_certs = sorted(set(member_certs.values()))
+    fabric_iq = {
+        "skill_gap_summary": skill_gaps,
+        "cohort_benchmarks": [fiq.get_cohort_benchmark(cert) for cert in team_certs],
+        "intervention_effectiveness": [fiq.get_intervention_effectiveness(cert) for cert in team_certs],
+    }
+    # Surface the top priority gap as a semantic risk area for the manager.
+    if skill_gaps.get("top_priority_gaps"):
+        risk_areas.append(skill_gaps["narrative"])
+
+    return {
+        **context,
+        "summary": summary,
+        "readiness_distribution": readiness_distribution,
+        "capacity_conflicts": capacity_conflicts,
+        "risk_areas": risk_areas,
+        "peer_learning_pairs": peer_pairs,
+        "manager_actions": manager_actions,
+        "fabric_iq": fabric_iq,
+    }
+
+
+def _projected_learner_snapshot(learner: LearnerProfile, evidence: dict, latest_assessment: Optional[dict]) -> dict:
+    normalized_evidence = _normalise_evidence(evidence)
+    pass_threshold = int((latest_assessment or {}).get("pass_threshold") or _pass_threshold_for_cert(learner.cert_target))
+    if not normalized_evidence:
+        return {
+            "learner_id": learner.learner_id,
+            "bucket": "insufficient_evidence",
+            "estimated_exam_score": 0,
+            "pass_threshold": pass_threshold,
+            "weakest_topic": None,
+            "available_study_hours_pw": round(learner.work_iq_signals.available_study_hours_per_week, 1),
+            "meeting_hours_pw": round(learner.work_iq_signals.meeting_hours_per_week, 1),
+            "focus_hours_pw": round(learner.work_iq_signals.focus_hours_per_week, 1),
+        }
+
+    avg_evidence = _average_evidence_score(normalized_evidence)
+    weakest_topic = min(normalized_evidence, key=normalized_evidence.get)
+    observed_score = (latest_assessment or {}).get("estimated_exam_score")
+    modeled_score = (
+        avg_evidence * 1000
+        + learner.work_iq_signals.available_study_hours_per_week * 18
+        + learner.work_iq_signals.focus_hours_per_week * 4
+        - max(0.0, learner.work_iq_signals.meeting_hours_per_week - 18) * 11
+        - (35 if learner.has_prior_failures and not (latest_assessment or {}).get("passed") else 0)
+    )
+    estimated_exam_score = round(
+        0.55 * float(observed_score) + 0.45 * modeled_score
+        if isinstance(observed_score, (int, float))
+        else modeled_score
+    )
+    estimated_exam_score = int(_clamp(estimated_exam_score, 0, 1000))
+    bucket = "on_track" if estimated_exam_score >= pass_threshold else "at_risk"
+
+    return {
+        "learner_id": learner.learner_id,
+        "bucket": bucket,
+        "estimated_exam_score": estimated_exam_score,
+        "pass_threshold": pass_threshold,
+        "weakest_topic": weakest_topic,
+        "available_study_hours_pw": round(learner.work_iq_signals.available_study_hours_per_week, 1),
+        "meeting_hours_pw": round(learner.work_iq_signals.meeting_hours_per_week, 1),
+        "focus_hours_pw": round(learner.work_iq_signals.focus_hours_per_week, 1),
+    }
+
+
+def _project_team_distribution(team_id: str, learners: list[LearnerProfile], evidence_by_learner: dict[str, dict], latest_assessments: dict[str, Optional[dict]]) -> dict:
+    snapshots = [
+        _projected_learner_snapshot(learner, evidence_by_learner.get(learner.learner_id, {}), latest_assessments.get(learner.learner_id))
+        for learner in learners
+    ]
+    readiness_distribution = {"on_track": 0, "at_risk": 0, "insufficient_evidence": 0}
+    for snapshot in snapshots:
+        readiness_distribution[snapshot["bucket"]] += 1
+
+    high_capacity_risk_members = [
+        learner.learner_id
+        for learner in learners
+        if learner.work_iq_signals.meeting_hours_per_week > 25
+    ]
+
+    summary = (
+        f"What-if view for {team_id}: {readiness_distribution['on_track']} learner(s) on track, "
+        f"{readiness_distribution['at_risk']} at risk, and "
+        f"{readiness_distribution['insufficient_evidence']} with insufficient evidence."
+    )
+
+    return {
+        "summary": summary,
+        "readiness_distribution": readiness_distribution,
+        "high_capacity_risk_members": high_capacity_risk_members,
+        "learner_snapshots": snapshots,
+    }
+
+
+async def _build_manager_what_if_payload(team_id: str, learners: list[LearnerProfile], req: ManagerWhatIfRequest) -> dict:
+    learner_map = {learner.learner_id: learner.model_copy(deep=True) for learner in learners}
+    target = learner_map.get(req.target_learner_id)
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Learner {req.target_learner_id} not found in {team_id}")
+
+    if req.peer_mentor_id and req.peer_mentor_id not in learner_map:
+        raise HTTPException(status_code=404, detail=f"Peer mentor {req.peer_mentor_id} not found in {team_id}")
+    if req.peer_mentor_id == req.target_learner_id:
+        raise HTTPException(status_code=400, detail="Peer mentor must differ from target learner")
+
+    cloned_learners = list(learner_map.values())
+    latest_assessments = {
+        learner.learner_id: await _latest_submitted_assessment(learner.learner_id, learner.cert_target)
+        for learner in learners
+    }
+    evidence_by_learner = {
+        learner.learner_id: _normalise_evidence(_evidence_for_manager_summary(learner, latest_assessments[learner.learner_id]))
+        for learner in learners
+    }
+
+    baseline = _project_team_distribution(team_id, cloned_learners, evidence_by_learner, latest_assessments)
+    assumptions: list[str] = []
+
+    if req.reduced_meeting_hours > 0:
+        target.work_iq_signals.meeting_hours_per_week = _clamp(
+            target.work_iq_signals.meeting_hours_per_week - req.reduced_meeting_hours,
+            0,
+            80,
+        )
+        target.work_iq_signals.available_study_hours_per_week = _clamp(
+            target.work_iq_signals.available_study_hours_per_week + req.reduced_meeting_hours * 0.6,
+            0,
+            40,
+        )
+        assumptions.append(
+            f"Protected {req.reduced_meeting_hours:.1f} meeting hour(s) per week for {target.learner_id}, converting part of that load into study time."
+        )
+
+    if req.protected_focus_hours > 0:
+        target.work_iq_signals.focus_hours_per_week = _clamp(
+            target.work_iq_signals.focus_hours_per_week + req.protected_focus_hours,
+            0,
+            80,
+        )
+        target.work_iq_signals.available_study_hours_per_week = _clamp(
+            target.work_iq_signals.available_study_hours_per_week + req.protected_focus_hours * 0.75,
+            0,
+            40,
+        )
+        assumptions.append(
+            f"Added {req.protected_focus_hours:.1f} protected focus hour(s) per week for {target.learner_id}."
+        )
+
+    target_evidence = dict(evidence_by_learner.get(target.learner_id, {}))
+    if req.targeted_review_hours > 0 and target_evidence:
+        weakest_topic = min(target_evidence, key=target_evidence.get)
+        review_boost = min(0.18, req.targeted_review_hours * 0.02)
+        target_evidence[weakest_topic] = _clamp(target_evidence[weakest_topic] + review_boost, 0.0, 1.0)
+        assumptions.append(
+            f"Targeted review improves {target.learner_id} on {weakest_topic.replace('_', ' ')} after {req.targeted_review_hours:.1f} hour(s) of remediation."
+        )
+
+    if req.peer_mentor_id and target_evidence:
+        mentor_evidence = dict(evidence_by_learner.get(req.peer_mentor_id, {}))
+        if mentor_evidence:
+            weakest_topic = min(target_evidence, key=target_evidence.get)
+            mentor_strength = mentor_evidence.get(weakest_topic, max(mentor_evidence.values(), default=0.0))
+            peer_boost = max(0.05, min(0.18, (mentor_strength - target_evidence.get(weakest_topic, 0.0)) * 0.6 + 0.03 * max(req.peer_session_count, 1)))
+            target_evidence[weakest_topic] = _clamp(target_evidence.get(weakest_topic, 0.0) + peer_boost, 0.0, 1.0)
+            assumptions.append(
+                f"{req.peer_mentor_id} coaches {target.learner_id} for {max(req.peer_session_count, 1)} session(s), improving {weakest_topic.replace('_', ' ')} confidence."
+            )
+
+    evidence_by_learner[target.learner_id] = target_evidence
+    projected = _project_team_distribution(team_id, cloned_learners, evidence_by_learner, latest_assessments)
+
+    baseline_target = next(item for item in baseline["learner_snapshots"] if item["learner_id"] == target.learner_id)
+    projected_target = next(item for item in projected["learner_snapshots"] if item["learner_id"] == target.learner_id)
+
+    deltas = {
+        "on_track": projected["readiness_distribution"]["on_track"] - baseline["readiness_distribution"]["on_track"],
+        "at_risk": projected["readiness_distribution"]["at_risk"] - baseline["readiness_distribution"]["at_risk"],
+        "insufficient_evidence": projected["readiness_distribution"]["insufficient_evidence"] - baseline["readiness_distribution"]["insufficient_evidence"],
+        "high_capacity_risk": len(projected["high_capacity_risk_members"]) - len(baseline["high_capacity_risk_members"]),
+        "target_estimated_exam_score": projected_target["estimated_exam_score"] - baseline_target["estimated_exam_score"],
+    }
+
+    recommended_action = (
+        f"Adopt this intervention for {target.learner_id}; the projected score improves by {deltas['target_estimated_exam_score']} points and moves the learner to {projected_target['bucket'].replace('_', ' ')}."
+        if projected_target["bucket"] == "on_track" and deltas["target_estimated_exam_score"] > 0
+        else f"This intervention helps but does not fully de-risk {target.learner_id}; keep remediation focused on {projected_target['weakest_topic'] or 'the weakest topic'} and schedule another mock exam."
+    )
+
+    scenario_summary = (
+        f"If the manager protects time for {target.learner_id}"
+        f"{f', adds {req.peer_mentor_id} as peer mentor' if req.peer_mentor_id else ''}, "
+        f"the projected score moves from {baseline_target['estimated_exam_score']} to {projected_target['estimated_exam_score']}"
+        f" against a threshold of {projected_target['pass_threshold']}."
+    )
+
+    return {
+        "team_id": team_id,
+        "scenario_summary": scenario_summary,
+        "assumptions": assumptions,
+        "baseline": {
+            **baseline,
+            "target_learner": baseline_target,
+        },
+        "projected": {
+            **projected,
+            "target_learner": projected_target,
+        },
+        "deltas": deltas,
+        "recommended_action": recommended_action,
+    }
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
+    from backend.core import llm_cache
+    from backend.middleware.pipeline import content_safety_mode
     return {
         "status": "ok",
         "backend": s.model_backend.value,
         "storage": s.storage_backend.value,
+        "iq_layers": {
+            "foundry_iq": "azure" if s.foundry_iq_endpoint != "local" else "local",
+            "work_iq": "synthetic",
+            "fabric_iq": "azure" if s.fabric_iq_endpoint != "local" else "local",
+        },
+        "content_safety": content_safety_mode(),
+        "llm_cache": llm_cache.stats(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/api/cache/stats")
+async def cache_stats():
+    """LLM response-cache hit/miss/entry counters (surfaced in the dashboard)."""
+    from backend.core import llm_cache
+    return llm_cache.stats()
 
 
 @app.get("/api/learners")
@@ -351,7 +828,20 @@ async def submit_assessment(req: AssessmentSubmitRequest):
         cert_id=req.cert_id,
         plan_id="adhoc",
         evidence_json=json.dumps(evidence),
+        observed_exam_score=estimated_score,
+        observed_score_pct=round(score_pct, 1),
     ))
+
+    stored["submitted_at"] = datetime.now(timezone.utc).isoformat()
+    stored["submitted_answers"] = req.answers
+    stored["evidence"] = evidence
+    stored["score_pct"] = round(score_pct, 1)
+    stored["questions_scored"] = total
+    stored["estimated_exam_score"] = estimated_score
+    stored["pass_threshold"] = pass_threshold
+    stored["passed"] = estimated_score >= pass_threshold
+    stored["forecast"] = forecast
+    await storage.save_assessment(stored)
 
     return {
         "assessment_id": req.assessment_id,
@@ -366,6 +856,89 @@ async def submit_assessment(req: AssessmentSubmitRequest):
     }
 
 
+async def _latest_submitted_assessment(learner_id: str, cert_id: str) -> Optional[dict]:
+    assessments = await storage.list_assessments(learner_id, cert_id)
+    submitted = [assessment for assessment in assessments if assessment.get("submitted_at") and isinstance(assessment.get("evidence"), dict)]
+    if not submitted:
+        return None
+
+    submitted.sort(key=lambda assessment: assessment.get("submitted_at", ""), reverse=True)
+    return submitted[0]
+
+
+async def _latest_assessment_evidence(learner_id: str, cert_id: str) -> dict:
+    latest = await _latest_submitted_assessment(learner_id, cert_id)
+    if not latest:
+        return {}
+    return latest.get("evidence", {})
+
+
+async def _latest_plan(learner_id: str, cert_id: str) -> Optional[dict]:
+    plans = await storage.list_plans(learner_id, cert_id)
+    if not plans:
+        return None
+
+    def _plan_sort_key(plan: dict) -> tuple[int, str]:
+        status_rank = 1 if plan.get("status") == "approved" else 0
+        timestamp = str(
+            plan.get("approved_at")
+            or plan.get("_updated_at")
+            or plan.get("created_at")
+            or ""
+        )
+        return (status_rank, timestamp)
+
+    plans.sort(key=_plan_sort_key, reverse=True)
+    return plans[0]
+
+
+@app.get("/api/progress/{learner_id}/{cert_id}")
+async def get_progress(learner_id: str, cert_id: str):
+    from backend.mcp_server.server import ProgressSeriesInput, compute_progress_series
+
+    plan = await _latest_plan(learner_id, cert_id)
+    progress_payload = {
+        "learner_id": learner_id,
+        "cert_id": cert_id,
+        "plan_id": plan.get("id") if plan else "latest",
+        "series": [],
+    }
+    if plan:
+        progress_payload = await compute_progress_series.fn(ProgressSeriesInput(
+            learner_id=learner_id,
+            cert_id=cert_id,
+            plan_id=plan["id"],
+        ))
+
+    assessments = await storage.list_assessments(learner_id, cert_id)
+    submitted = [assessment for assessment in assessments if assessment.get("submitted_at")]
+    submitted.sort(key=lambda assessment: assessment.get("submitted_at", ""))
+
+    attempts = []
+    for index, assessment in enumerate(submitted, start=1):
+        questions = assessment.get("questions", [])
+        difficulties = {q.get("difficulty") for q in questions if q.get("difficulty")}
+        if len(difficulties) == 1:
+            difficulty = next(iter(difficulties))
+        elif difficulties:
+            difficulty = "Mixed"
+        else:
+            difficulty = "Unknown"
+
+        attempts.append({
+            "attempt_number": index,
+            "assessment_id": assessment.get("assessment_id") or assessment.get("id"),
+            "submitted_at": assessment.get("submitted_at"),
+            "score_pct": assessment.get("score_pct"),
+            "estimated_exam_score": assessment.get("estimated_exam_score"),
+            "passed": assessment.get("passed", False),
+            "difficulty": difficulty,
+            "question_count": len(questions),
+        })
+
+    return {**progress_payload, "attempts": attempts}
+
+
 @app.get("/api/mastery/{learner_id}/{cert_id}")
 async def get_mastery(learner_id: str, cert_id: str):
     from backend.mcp_server.server import compute_domain_mastery, DomainMasteryInput
@@ -375,7 +948,9 @@ async def get_mastery(learner_id: str, cert_id: str):
     path = Path(s.data_dir) / "synthetic" / "learners.json"
     learners = json.loads(path.read_text())
     learner = next((l for l in learners if l["learner_id"] == learner_id), None)
-    evidence = learner.get("prior_assessment_evidence", {}) if learner else {}
+    evidence = await _latest_assessment_evidence(learner_id, cert_id)
+    if not evidence:
+        evidence = learner.get("prior_assessment_evidence", {}) if learner else {}
 
     return await compute_domain_mastery.fn(DomainMasteryInput(
         learner_id=learner_id,
@@ -393,26 +968,159 @@ async def get_forecast(learner_id: str, cert_id: str):
     path = Path(s.data_dir) / "synthetic" / "learners.json"
     learners = json.loads(path.read_text())
     learner = next((l for l in learners if l["learner_id"] == learner_id), None)
-    evidence = learner.get("prior_assessment_evidence", {}) if learner else {}
+    latest_assessment = await _latest_submitted_assessment(learner_id, cert_id)
+    evidence = latest_assessment.get("evidence", {}) if latest_assessment else {}
+    if not evidence:
+        evidence = learner.get("prior_assessment_evidence", {}) if learner else {}
 
     return await compute_readiness_forecast.fn(ForecastInput(
         learner_id=learner_id,
         cert_id=cert_id,
         plan_id="latest",
         evidence_json=json.dumps(evidence),
+        observed_exam_score=latest_assessment.get("estimated_exam_score") if latest_assessment else None,
+        observed_score_pct=latest_assessment.get("score_pct") if latest_assessment else None,
     ))
+
+
+@app.get("/api/reports/learner/{learner_id}/{cert_id}.pdf")
+async def learner_report_pdf(learner_id: str, cert_id: str):
+    """Download a learner readiness PDF (forecast + domain mastery + plan summary)."""
+    from backend.reports.pdf import generate_learner_report, cached_pdf
+
+    learner = _load_learner(learner_id)  # 404s if unknown
+    forecast = await get_forecast(learner_id, cert_id)
+    mastery = await get_mastery(learner_id, cert_id)
+    plans = await storage.list_plans(learner_id, cert_id)
+    plan = plans[-1] if plans else None
+
+    pdf = cached_pdf(
+        learner_id, f"learner_{cert_id}",
+        generate_learner_report, learner.model_dump(mode="json"), forecast, mastery, plan,
+    )
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="readiness_{learner_id}_{cert_id}.pdf"'},
+    )
+
+
+@app.get("/api/reports/manager/{team_id}.pdf")
+async def manager_brief_pdf(team_id: str):
+    """Download a manager handoff brief PDF (readiness, risk, Fabric IQ gaps, pinned actions)."""
+    from backend.reports.pdf import generate_manager_brief, cached_pdf
+
+    team_learners = [l for l in _load_all_learners() if l.team_id == team_id]
+    if not team_learners:
+        raise HTTPException(status_code=404, detail=f"Team {team_id} not found")
+    insights = await _build_manager_insight_payload(team_id, team_learners)
+    interventions = await storage.list_manager_interventions(team_id)
+    peer_sessions = await storage.list_peer_learning_sessions(team_id)
+
+    pdf = cached_pdf(
+        team_id, "manager_brief",
+        generate_manager_brief, team_id, insights, interventions, peer_sessions,
+    )
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="manager_brief_{team_id}.pdf"'},
+    )
 
 
 @app.get("/api/manager/{team_id}/insights")
 async def manager_insights(team_id: str):
-    """Return team-level manager insights using Work IQ signals."""
-    from backend.iq.work_iq import get_work_iq
+    """Return team-level manager insights using Work IQ signals and recent assessment state."""
     all_learners = _load_all_learners()
     team_learners = [l for l in all_learners if l.team_id == team_id]
     if not team_learners:
         raise HTTPException(status_code=404, detail=f"Team {team_id} not found")
-    wiq = get_work_iq()
-    return await wiq.get_team_context(team_id, team_learners)
+    return await _build_manager_insight_payload(team_id, team_learners)
+
+
+@app.post("/api/manager/{team_id}/what-if")
+async def manager_what_if(team_id: str, req: ManagerWhatIfRequest):
+    team_learners = [learner for learner in _load_all_learners() if learner.team_id == team_id]
+    if not team_learners:
+        raise HTTPException(status_code=404, detail=f"Team {team_id} not found")
+    return await _build_manager_what_if_payload(team_id, team_learners, req)
+
+
+@app.get("/api/manager/{team_id}/peer-sessions")
+async def list_peer_learning_sessions(team_id: str):
+    sessions = await storage.list_peer_learning_sessions(team_id)
+    sessions.sort(key=lambda session: str(session.get("_updated_at") or session.get("created_at") or ""), reverse=True)
+    return sessions
+
+
+@app.post("/api/manager/{team_id}/peer-sessions")
+async def save_peer_learning_session(team_id: str, req: PeerLearningSessionRequest):
+    existing_sessions = await storage.list_peer_learning_sessions(team_id)
+    existing = next((item for item in existing_sessions if item.get("id") == req.id), None)
+    session = await storage.save_peer_learning_session({
+        "id": req.id,
+        "team_id": team_id,
+        "mentor_id": req.mentor_id,
+        "learner_id": req.learner_id,
+        "cert_id": req.cert_id,
+        "focus_domain": req.focus_domain,
+        "suggested_slot": req.suggested_slot,
+        "rationale": req.rationale,
+        "owner_id": req.owner_id,
+        "status": req.status,
+        "manager_note": req.manager_note,
+        "created_at": (existing or {}).get("created_at") or datetime.now(timezone.utc).isoformat(),
+    })
+    return session
+
+
+@app.delete("/api/manager/{team_id}/peer-sessions/{session_id}")
+async def delete_peer_learning_session(team_id: str, session_id: str):
+    sessions = await storage.list_peer_learning_sessions(team_id)
+    session = next((item for item in sessions if item.get("id") == session_id), None)
+    if not session:
+        raise HTTPException(status_code=404, detail="Peer learning session not found")
+
+    deleted = await storage.delete_peer_learning_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Peer learning session not found")
+    return {"status": "deleted", "id": session_id}
+
+
+@app.get("/api/manager/{team_id}/interventions")
+async def list_manager_interventions(team_id: str):
+    interventions = await storage.list_manager_interventions(team_id)
+    interventions.sort(key=lambda item: str(item.get("_updated_at") or item.get("created_at") or ""), reverse=True)
+    return interventions
+
+
+@app.post("/api/manager/{team_id}/interventions")
+async def save_manager_intervention(team_id: str, req: ManagerInterventionRequest):
+    existing_interventions = await storage.list_manager_interventions(team_id)
+    existing = next((item for item in existing_interventions if item.get("id") == req.id), None)
+    intervention = await storage.save_manager_intervention({
+        "id": req.id,
+        "team_id": team_id,
+        "learner_id": req.learner_id,
+        "priority": req.priority,
+        "reasons": req.reasons,
+        "owner_id": req.owner_id,
+        "status": req.status,
+        "manager_note": req.manager_note,
+        "created_at": (existing or {}).get("created_at") or datetime.now(timezone.utc).isoformat(),
+    })
+    return intervention
+
+
+@app.delete("/api/manager/{team_id}/interventions/{intervention_id}")
+async def delete_manager_intervention(team_id: str, intervention_id: str):
+    interventions = await storage.list_manager_interventions(team_id)
+    intervention = next((item for item in interventions if item.get("id") == intervention_id), None)
+    if not intervention:
+        raise HTTPException(status_code=404, detail="Manager intervention not found")
+
+    deleted = await storage.delete_manager_intervention(intervention_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Manager intervention not found")
+    return {"status": "deleted", "id": intervention_id}
 
 
 @app.get("/api/cert-structures/{cert_id}")

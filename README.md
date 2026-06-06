@@ -10,7 +10,7 @@
 
 ## What it does
 
-EnterpriseCertIQ is a 6-agent pipeline that turns a certification goal into a grounded, work-aware study plan — with visible reasoning, calibrated readiness forecasting, and a human-in-the-loop approval checkpoint: the plan stays in `draft` and is only marked published once a human approves it. (Engagement and Manager Insights run on the draft to give the reviewer advisory previews at approval time.)
+EnterpriseCertIQ is a 6-agent pipeline that turns a certification goal into a grounded, work-aware study plan — with visible reasoning, calibrated readiness forecasting, a human-in-the-loop approval checkpoint, and a manager surface that turns weak signals into concrete follow-up. The plan stays in `draft` and is only marked published once a human approves it. Engagement and Manager Insights run on the draft to give the reviewer advisory previews at approval time.
 
 | Agent | Role |
 |---|---|
@@ -19,7 +19,7 @@ EnterpriseCertIQ is a 6-agent pipeline that turns a certification goal into a gr
 | **Study Plan Generator** | Builds a capacity-aware weekly schedule |
 | **Readiness Critic** | Attacks the plan, finds gaps, produces calibrated forecast |
 | **Engagement Agent** | Schedules reminders adapted to work patterns |
-| **Manager Insights** | Surfaces team-level risk and peer-learning opportunities |
+| **Manager Insights** | Surfaces team-level risk, intervention queues, peer-learning opportunities, and handoff actions |
 | **Retrospective** *(conditional)* | Investigates prior failures — meta-reasoning about the system |
 
 ---
@@ -50,9 +50,17 @@ FastAPI Backend (port 8000)
  Azure OpenAI / APIM Gateway
 ```
 
-**IQ layers**
+**IQ layers** (all three integrated)
 - **Foundry IQ** — local: keyword search over `./backend/data/documents/`; Azure: Azure AI Search index
-- **Work IQ** — synthetic meeting/focus signals from `./backend/data/synthetic/learners.json`
+- **Work IQ** — synthetic meeting/focus signals from `./backend/data/synthetic/learners.json`,
+  or **real Microsoft 365 calendar via Microsoft Graph** (`WORK_IQ_SOURCE=graph`,
+  `backend/iq/work_iq_graph.py`; same `WorkContext` contract, synthetic fallback). See
+  [docs/work-iq-graph.md](docs/work-iq-graph.md).
+- **Fabric IQ** — semantic layer (`backend/iq/fabric_iq.py`): an ontology over roles,
+  certifications, weighted skill domains, thresholds, and cohort outcomes. Powers the
+  Readiness Critic (leverage-weighted objections) and Manager Insights (team skill-gap
+  meaning, cohort benchmarks, intervention effectiveness). Local: in-memory ontology over
+  the synthetic datasets; Azure: Microsoft Fabric semantic model / OneLake.
 
 ---
 
@@ -110,10 +118,11 @@ It captures the recent runtime fixes, structured-output contracts, validation st
 | 3 | Downloads + loads the configured Foundry Local model |
 | 4 | Creates `backend/data/store/` for local JSON storage |
 | 5 | Starts own MCP server on port 8001 |
-| 6 | Starts FastAPI backend on port 8000 (with `--reload`) |
+| 6 | Starts FastAPI backend on port 8000 (`--reload` only when `BACKEND_RELOAD=true`) |
 | 7 | `npm install` + starts Vite dev server on port 5173 |
 
-All three server processes are stopped together when you press **Ctrl+C**.
+Healthy services are reused on reruns, so `./start.sh --no-setup --skip-model` can be used as a fast restart path without duplicating backend or frontend processes.
+Only processes started by the current script run are stopped when you press **Ctrl+C**.
 
 ---
 
@@ -214,11 +223,52 @@ If you want strict criteria coverage with minimal Azure spend, the minimum Azure
 | `POST` | `/api/plans/approve` | **HITL gate** — approve a draft plan |
 | `GET` | `/api/mastery/{lid}/{cid}` | Domain mastery breakdown |
 | `GET` | `/api/forecast/{lid}/{cid}` | Readiness forecast |
+| `GET` | `/api/progress/{lid}/{cid}` | Assessment history and plan progress |
 | `POST` | `/api/assessment/generate` | Generate mock exam |
 | `POST` | `/api/assessment/submit` | Score exam + update forecast |
-| `GET` | `/api/manager/{team_id}/insights` | Team Work IQ insights |
+| `GET` | `/api/manager/{team_id}/insights` | Team Work IQ + Fabric IQ insights plus readiness/risk summary |
+| `POST` | `/api/manager/{team_id}/what-if` | Counterfactual intervention simulator |
+| `GET/POST/DELETE` | `/api/manager/{team_id}/peer-sessions` | Persisted peer-learning queue |
+| `GET/POST/DELETE` | `/api/manager/{team_id}/interventions` | Persisted manager intervention queue |
+| `GET` | `/api/reports/learner/{lid}/{cid}.pdf` | Learner readiness PDF (demo-cached) |
+| `GET` | `/api/reports/manager/{team_id}.pdf` | Manager handoff brief PDF (demo-cached) |
+| `GET` | `/api/cache/stats` | LLM response-cache hit/miss/entry counters |
 | `GET` | `/api/cert-structures/{cert_id}` | Cert domain structure |
 | `GET` | `/docs` | Interactive Swagger UI |
+
+---
+
+## Manager workflow
+
+The Manager view now supports a full follow-through loop instead of just labels:
+
+- `Needs action now` cards can be pinned into a persisted intervention queue.
+- Peer-learning recommendations can be pinned into a persisted session queue.
+- Both queues track `owner`, `status`, `manager_note`, and update timestamps.
+- The page can copy a manager handoff brief that summarizes readiness, recommended actions, pinned interventions, and pinned peer sessions.
+- Peer-learning now supports same-cert mentoring first, then a cross-cert study-habit fallback when a team has no same-cert coach available.
+
+This makes TEAM-B usable in demos even when cert targets differ.
+
+---
+
+## Testing
+
+```bash
+source .venv/bin/activate
+pytest -q
+```
+
+Regression coverage now includes:
+
+- manager insights enriched payload keys
+- peer-session create/update/delete flow
+- manager intervention create/update/delete flow
+- Fabric IQ semantic layer (thresholds, readiness semantics, team skill-gap, cohort)
+- rubric-based agent-quality evals (per-agent E-checks, 0.8 threshold)
+- LLM response cache (key determinism, round-trip, stats)
+- Azure Content Safety guardrail (regex fallback + pipeline withholding)
+- PDF report generation + demo cache
 
 ---
 
@@ -279,7 +329,8 @@ enterprisecertiq/
 │   │   └── pipeline.py        ← PII · citation-gate · safety · bias-audit
 │   ├── iq/
 │   │   ├── foundry_iq.py      ← grounded retrieval (local files / Azure AI Search)
-│   │   └── work_iq.py         ← work-context signals
+│   │   ├── work_iq.py         ← work-context signals
+│   │   └── fabric_iq.py       ← semantic ontology (roles, certs, domains, thresholds, cohort)
 │   ├── storage/
 │   │   └── store.py           ← JSON local / Cosmos DB abstraction
 │   ├── models/                ← Pydantic schemas
@@ -305,10 +356,31 @@ enterprisecertiq/
 
 - Every generated artifact carries an **"AI-generated"** disclosure banner (RAI requirement).
 - **HITL gate**: study plans require human approval before publishing.
+- **Azure AI Content Safety**: free-text output is screened by the live Content Safety API
+  (Hate/SelfHarm/Sexual/Violence; severity ≥ threshold → BLOCK), with a regex fallback offline.
 - **Bias audit**: middleware scans generated assessment questions for stereotypes.
 - **Citation-or-drop**: uncited claims are flagged, never silently passed through.
 - **Honest uncertainty**: the Readiness Critic returns `insufficient_evidence: true` rather than fabricating a forecast.
-- Manager Insights never exposes individual scores that could affect employment decisions.
+- Manager Insights never exposes individual scores that could affect employment decisions
+  (enforced and unit-tested via the agent rubric harness).
+
+## Reliability & performance
+
+- **LLM response cache** (`backend/core/llm_cache.py`) — SHA-256 keyed over the request;
+  deterministic (temperature-0) calls hit the cache and skip the model entirely. Cuts cost +
+  latency and makes demo re-runs instant. Hit-rate visible at `/api/cache/stats` and `/health`.
+- **Rubric-based agent evals** (`backend/evals/agent_rubrics.py`) — per-agent quality checks
+  with a 0.8 pass threshold, run in CI with no credentials.
+- **PDF reports** (`backend/reports/pdf.py`) — learner readiness + manager handoff brief,
+  demo-cached for instant repeat downloads.
+- **Deterministic tier-3 fallback** (`backend/agents/fallbacks.py`) — every agent has a
+  no-model deterministic builder. `AGENT_FALLBACK_MODE=auto` (default) degrades gracefully on
+  a model error; `=force` runs the **entire pipeline with zero model calls** (instant,
+  reproducible demo mode). Fallback outputs pass the same quality rubrics.
+- **9 certification families** — `AZ-204/305/400`, `DP-203/100`, `AI-102/900`, `SC-100`,
+  `MS-102` — fully data-driven from `cert_structures.json` (every agent/IQ layer adapts; no
+  code change to add a cert).
+- **Containerised deploy** — see [docs/deployment.md](docs/deployment.md) (Azure Container Apps).
 
 ---
 
@@ -321,8 +393,12 @@ enterprisecertiq/
 | Microsoft Learn MCP | `microsoft_docs_search`, `microsoft_docs_fetch`, `microsoft_code_sample_search` |
 | Foundry IQ | Grounded knowledge retrieval from cert content |
 | Work IQ | Work-context signals (meeting load, focus windows) |
+| Fabric IQ | Semantic ontology — roles, certs, weighted domains, thresholds, cohort outcomes |
+| Azure AI Content Safety | Live output screening (regex fallback offline) |
+| Azure AI Evaluation | Groundedness LLM-as-judge (Azure path) |
 | Azure Cosmos DB | Production storage (local JSON in dev) |
-| FastMCP | Own MCP server exposing 9 typed tools |
+| FastMCP | Own MCP server exposing 10 typed tools (incl. Fabric IQ semantics) |
+| ReportLab | Learner + manager PDF report generation |
 
 ---
 

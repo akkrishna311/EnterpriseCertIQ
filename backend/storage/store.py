@@ -65,6 +65,14 @@ class LocalJSONStore:
     async def list_all(self, container: str) -> list[dict]:
         return self._read(container)
 
+    async def delete(self, container: str, item_id: str) -> bool:
+        records = self._read(container)
+        filtered = [record for record in records if record.get("id") != item_id]
+        if len(filtered) == len(records):
+            return False
+        self._write(container, filtered)
+        return True
+
 
 class CosmosStore:
     """Azure Cosmos DB store — fill in credentials to activate."""
@@ -113,6 +121,15 @@ class CosmosStore:
             items.append(item)
         return items
 
+    async def delete(self, container: str, item_id: str) -> bool:
+        db = self._get_client().get_database_client(self._database)
+        c = db.get_container_client(container)
+        try:
+            await c.delete_item(item=item_id, partition_key=item_id)
+            return True
+        except Exception:
+            return False
+
 
 class AppStorage:
     """
@@ -123,7 +140,7 @@ class AppStorage:
     CONTAINERS = [
         "study_plans", "reasoning_trace", "learner_memory",
         "progress_series", "mastery_grid", "eval_results",
-        "a2a_audit", "team_capacity", "assessments",
+        "a2a_audit", "team_capacity", "assessments", "peer_learning_sessions", "manager_interventions",
     ]
 
     def __init__(self):
@@ -151,6 +168,12 @@ class AppStorage:
     async def get_plan(self, plan_id: str) -> Optional[dict]:
         return await self._store.get("study_plans", plan_id)
 
+    async def list_plans(self, learner_id: str, cert_id: Optional[str] = None) -> list[dict]:
+        records = await self._store.query("study_plans", "learner_id", learner_id)
+        if cert_id is not None:
+            records = [record for record in records if record.get("cert_id") == cert_id]
+        return records
+
     async def approve_plan(self, plan_id: str, approved_by: str = "human") -> Optional[dict]:
         plan = await self.get_plan(plan_id)
         if plan:
@@ -168,6 +191,12 @@ class AppStorage:
     async def get_assessment(self, assessment_id: str) -> Optional[dict]:
         return await self._store.get("assessments", assessment_id)
 
+    async def list_assessments(self, learner_id: str, cert_id: Optional[str] = None) -> list[dict]:
+        records = await self._store.query("assessments", "learner_id", learner_id)
+        if cert_id is not None:
+            records = [record for record in records if record.get("cert_id") == cert_id]
+        return records
+
     # ── Mastery Grid ────────────────────────────────────────────────
     async def save_mastery(self, mastery: dict) -> dict:
         return await self._store.upsert("mastery_grid", mastery)
@@ -182,6 +211,29 @@ class AppStorage:
 
     async def list_all(self, container: str) -> list[dict]:
         return await self._store.list_all(container)
+
+    async def delete(self, container: str, item_id: str) -> bool:
+        return await self._store.delete(container, item_id)
+
+    async def save_peer_learning_session(self, session: dict) -> dict:
+        session.setdefault("id", str(uuid.uuid4()))
+        return await self._store.upsert("peer_learning_sessions", session)
+
+    async def list_peer_learning_sessions(self, team_id: str) -> list[dict]:
+        return await self._store.query("peer_learning_sessions", "team_id", team_id)
+
+    async def delete_peer_learning_session(self, session_id: str) -> bool:
+        return await self._store.delete("peer_learning_sessions", session_id)
+
+    async def save_manager_intervention(self, intervention: dict) -> dict:
+        intervention.setdefault("id", str(uuid.uuid4()))
+        return await self._store.upsert("manager_interventions", intervention)
+
+    async def list_manager_interventions(self, team_id: str) -> list[dict]:
+        return await self._store.query("manager_interventions", "team_id", team_id)
+
+    async def delete_manager_intervention(self, intervention_id: str) -> bool:
+        return await self._store.delete("manager_interventions", intervention_id)
 
 
 _storage: Optional[AppStorage] = None

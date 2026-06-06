@@ -24,6 +24,14 @@ export async function postNoBodyJSON<T>(path: string): Promise<T> {
   return r.json()
 }
 
+export async function deleteJSON<T>(path: string): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+  })
+  if (!r.ok) throw new Error(`API error ${r.status}: ${path}`)
+  return r.json()
+}
+
 export function streamEvents(runId: string, onEvent: (e: unknown) => void): () => void {
   const es = new EventSource(`/api/workflow/${runId}/stream`)
   es.onmessage = (e) => {
@@ -40,6 +48,7 @@ export const api = {
   teams: () => fetchJSON<Team[]>('/teams'),
   runWorkflow: (learner_id: string) => postJSON<{ run_id: string }>('/workflow/run', { learner_id }),
   approvePlan: (plan_id: string) => postJSON('/plans/approve', { plan_id, approved_by: 'human' }),
+  progress: (lid: string, cid: string) => fetchJSON<ProgressSnapshot>(`/progress/${lid}/${cid}`),
   mastery: (lid: string, cid: string) => fetchJSON<MasteryGrid>(`/mastery/${lid}/${cid}`),
   forecast: (lid: string, cid: string) => fetchJSON<Forecast>(`/forecast/${lid}/${cid}`),
   generateAssessment: (lid: string, cid: string, difficulty?: string, count = 20) => {
@@ -48,8 +57,18 @@ export const api = {
       `/assessment/generate?learner_id=${lid}&cert_id=${cid}&question_count=${count}${diff}`,
     )
   },
+  submitAssessment: (body: { assessment_id: string; learner_id: string; cert_id: string; answers: Record<string, number> }) => (
+    postJSON<AssessmentResult>('/assessment/submit', body)
+  ),
   certStructure: (cid: string) => fetchJSON<CertStructure>(`/cert-structures/${cid}`),
   managerInsights: (tid: string) => fetchJSON<TeamInsights>(`/manager/${tid}/insights`),
+  managerWhatIf: (tid: string, body: ManagerWhatIfRequest) => postJSON<ManagerWhatIfResult>(`/manager/${tid}/what-if`, body),
+  peerSessions: (tid: string) => fetchJSON<PeerLearningSession[]>(`/manager/${tid}/peer-sessions`),
+  savePeerSession: (tid: string, body: PeerLearningSessionRequest) => postJSON<PeerLearningSession>(`/manager/${tid}/peer-sessions`, body),
+  deletePeerSession: (tid: string, sessionId: string) => deleteJSON<{ status: string; id: string }>(`/manager/${tid}/peer-sessions/${sessionId}`),
+  interventions: (tid: string) => fetchJSON<ManagerIntervention[]>(`/manager/${tid}/interventions`),
+  saveIntervention: (tid: string, body: ManagerInterventionRequest) => postJSON<ManagerIntervention>(`/manager/${tid}/interventions`, body),
+  deleteIntervention: (tid: string, interventionId: string) => deleteJSON<{ status: string; id: string }>(`/manager/${tid}/interventions/${interventionId}`),
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -113,6 +132,32 @@ export interface Forecast {
   insufficient_evidence: boolean
 }
 
+export interface ProgressPoint {
+  week: number
+  planned_topics: number
+  actual_topics: number
+  status: string
+}
+
+export interface AssessmentAttempt {
+  attempt_number: number
+  assessment_id: string
+  submitted_at: string
+  score_pct: number
+  estimated_exam_score: number
+  passed: boolean
+  difficulty: string
+  question_count: number
+}
+
+export interface ProgressSnapshot {
+  learner_id: string
+  cert_id: string
+  plan_id: string
+  series: ProgressPoint[]
+  attempts: AssessmentAttempt[]
+}
+
 export interface Question {
   question_id: string
   domain: string
@@ -132,6 +177,18 @@ export interface Assessment {
   time_limit_minutes: number
 }
 
+export interface AssessmentResult {
+  assessment_id: string
+  learner_id: string
+  score_pct: number
+  questions_scored: number
+  estimated_exam_score: number
+  pass_threshold: number
+  passed: boolean
+  forecast?: Forecast
+  ai_disclosure: string
+}
+
 export interface CertStructure {
   cert_id: string
   cert_name: string
@@ -142,11 +199,98 @@ export interface CertStructure {
 
 export interface TeamInsights {
   team_id: string
+  summary: string
   member_count: number
   average_meeting_hours_pw: number
   high_capacity_risk_members: string[]
+  readiness_distribution: Record<string, number>
+  capacity_conflicts: string[]
+  risk_areas: string[]
+  peer_learning_pairs: PeerLearningPair[]
+  manager_actions: string[]
   members: MemberContext[]
   ai_disclosure: string
+}
+
+export interface ManagerWhatIfRequest {
+  target_learner_id: string
+  protected_focus_hours: number
+  reduced_meeting_hours: number
+  targeted_review_hours: number
+  peer_mentor_id?: string
+  peer_session_count: number
+}
+
+export interface ManagerWhatIfLearnerSnapshot {
+  learner_id: string
+  bucket: string
+  estimated_exam_score: number
+  pass_threshold: number
+  weakest_topic?: string | null
+  available_study_hours_pw: number
+  meeting_hours_pw: number
+  focus_hours_pw: number
+}
+
+export interface ManagerWhatIfProjection {
+  summary: string
+  readiness_distribution: Record<string, number>
+  high_capacity_risk_members: string[]
+  learner_snapshots: ManagerWhatIfLearnerSnapshot[]
+  target_learner: ManagerWhatIfLearnerSnapshot
+}
+
+export interface ManagerWhatIfResult {
+  team_id: string
+  scenario_summary: string
+  assumptions: string[]
+  baseline: ManagerWhatIfProjection
+  projected: ManagerWhatIfProjection
+  deltas: Record<string, number>
+  recommended_action: string
+}
+
+export interface PeerLearningPair {
+  learner_a: string
+  strength: string
+  learner_b: string
+  gap: string
+  match_type?: string
+}
+
+export interface PeerLearningSessionRequest {
+  id: string
+  mentor_id: string
+  learner_id: string
+  cert_id: string
+  focus_domain: string
+  suggested_slot?: string
+  rationale: string
+  owner_id: string
+  status: string
+  manager_note: string
+}
+
+export interface PeerLearningSession extends PeerLearningSessionRequest {
+  team_id: string
+  created_at?: string
+  _updated_at?: string
+}
+
+export interface ManagerInterventionRequest {
+  id: string
+  learner_id: string
+  priority: string
+  reasons: string[]
+  owner_id: string
+  status: string
+  manager_note: string
+}
+
+export interface ManagerIntervention extends ManagerInterventionRequest {
+  team_id: string
+  created_at?: string
+  _updated_at?: string
 }
 
 export interface MemberContext {

@@ -142,5 +142,72 @@
         "services": ["Azure Virtual Network", "Azure Kubernetes Service", "Azure App Service", "Azure Load Balancer"]
       }
     ]
+  },
+  "AI-102": {
+    "cert_id": "AI-102",
+    "cert_name": "Azure AI Engineer Associate",
+    "role": "AI Engineer",
+    "recommended_study_hours": 25,
+    "passing_score": 700,
+    "domains": [
+      {"domain_id": "D1", "name": "Plan and manage an Azure AI solution", "weight_pct": 20, "services": ["Azure AI services", "Responsible AI", "Cognitive Services resource", "Containers"]},
+      {"domain_id": "D2", "name": "Implement generative AI solutions", "weight_pct": 15, "services": ["Azure OpenAI", "Prompt engineering", "Retrieval Augmented Generation", "Azure AI Studio"]},
+      {"domain_id": "D3", "name": "Implement computer vision solutions", "weight_pct": 20, "services": ["Azure AI Vision", "Custom Vision", "Face API", "Video Indexer"]},
+      {"domain_id": "D4", "name": "Implement natural language processing solutions", "weight_pct": 20, "services": ["Azure AI Language", "Translator", "Speech", "Question Answering"]},
+      {"domain_id": "D5", "name": "Implement knowledge mining and document intelligence", "weight_pct": 25, "services": ["Azure AI Search", "Document Intelligence", "Knowledge store", "Skillsets"]}
+    ]
+  },
+  "DP-100": {
+    "cert_id": "DP-100",
+    "cert_name": "Azure Data Scientist Associate",
+    "role": "Data Scientist",
+    "recommended_study_hours": 25,
+    "passing_score": 700,
+    "domains": [
+      {"domain_id": "D1", "name": "Design and prepare a machine learning solution", "weight_pct": 25, "services": ["Azure ML workspace", "Compute targets", "Datastores", "Data assets"]},
+      {"domain_id": "D2", "name": "Explore data and train models", "weight_pct": 35, "services": ["Automated ML", "MLflow", "Notebooks", "Hyperparameter tuning"]},
+      {"domain_id": "D3", "name": "Prepare a model for deployment", "weight_pct": 20, "services": ["Pipelines", "Environments", "Model registry", "Components"]},
+      {"domain_id": "D4", "name": "Deploy and retrain a model", "weight_pct": 20, "services": ["Online endpoints", "Batch endpoints", "Monitoring", "Responsible AI dashboard"]}
+    ]
+  },
+  "AI-900": {
+    "cert_id": "AI-900",
+    "cert_name": "Azure AI Fundamentals",
+    "role": "AI Practitioner",
+    "recommended_study_hours": 12,
+    "passing_score": 700,
+    "domains": [
+      {"domain_id": "D1", "name": "Describe AI workloads and considerations", "weight_pct": 20, "services": ["Responsible AI", "AI workloads", "Fairness", "Transparency"]},
+      {"domain_id": "D2", "name": "Describe fundamental principles of machine learning", "weight_pct": 25, "services": ["Regression", "Classification", "Clustering", "Azure Machine Learning"]},
+      {"domain_id": "D3", "name": "Describe features of computer vision workloads", "weight_pct": 20, "services": ["Image classification", "Object detection", "Azure AI Vision", "OCR"]},
+      {"domain_id": "D4", "name": "Describe features of natural language processing workloads", "weight_pct": 20, "services": ["Text analytics", "Speech", "Translation", "Azure AI Language"]},
+      {"domain_id": "D5", "name": "Describe features of generative AI workloads", "weight_pct": 15, "services": ["Azure OpenAI", "Copilot", "Prompt engineering", "Foundation models"]}
+    ]
+  },
+  "SC-100": {
+    "cert_id": "SC-100",
+    "cert_name": "Microsoft Cybersecurity Architect Expert",
+    "role": "Security Architect",
+    "recommended_study_hours": 30,
+    "passing_score": 700,
+    "domains": [
+      {"domain_id": "D1", "name": "Design a Zero Trust strategy and architecture", "weight_pct": 30, "services": ["Zero Trust", "Identity", "Microsoft Defender", "Conditional Access"]},
+      {"domain_id": "D2", "name": "Evaluate GRC strategies and security operations", "weight_pct": 25, "services": ["Compliance", "Microsoft Sentinel", "Security operations", "Microsoft Purview"]},
+      {"domain_id": "D3", "name": "Design security for infrastructure", "weight_pct": 25, "services": ["Endpoints", "Networks", "Compute", "Defender for Cloud"]},
+      {"domain_id": "D4", "name": "Design a strategy for data and applications", "weight_pct": 20, "services": ["Data security", "Application security", "DevSecOps", "Key management"]}
+    ]
+  },
+  "MS-102": {
+    "cert_id": "MS-102",
+    "cert_name": "Microsoft 365 Administrator Expert",
+    "role": "Microsoft 365 Administrator",
+    "recommended_study_hours": 28,
+    "passing_score": 700,
+    "domains": [
+      {"domain_id": "D1", "name": "Deploy and manage a Microsoft 365 tenant", "weight_pct": 25, "services": ["Tenant", "Domains", "Admin roles", "Service health"]},
+      {"domain_id": "D2", "name": "Implement and manage identity and access", "weight_pct": 25, "services": ["Microsoft Entra ID", "Multi-factor authentication", "Conditional Access", "Self-service password reset"]},
+      {"domain_id": "D3", "name": "Manage security and threats using Microsoft 365 Defender", "weight_pct": 25, "services": ["Microsoft 365 Defender", "Safe Attachments", "Safe Links", "Threat policies"]},
+      {"domain_id": "D4", "name": "Manage compliance using Microsoft Purview", "weight_pct": 25, "services": ["Data loss prevention", "Retention", "Sensitivity labels", "eDiscovery"]}
+    ]
   }
 }

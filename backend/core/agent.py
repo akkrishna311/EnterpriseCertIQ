@@ -47,6 +47,7 @@ class BaseAgent:
         max_tool_rounds: int = 5,
         max_tokens: int = 2048,
         on_event: Optional[Callable[[TraceEvent], None]] = None,
+        supports_fallback: bool = False,
     ):
         self.name = name
         self.instructions = instructions
@@ -57,6 +58,9 @@ class BaseAgent:
         self.max_tool_rounds = max_tool_rounds
         self.max_tokens = max_tokens
         self.on_event = on_event
+        # Tier-3 deterministic fallback: when True, this agent can produce a
+        # schema-shaped result with no model (on model error, or in force mode).
+        self.supports_fallback = supports_fallback
         self._tool_executors: dict[str, Callable] = {}
 
     def register_tool_executor(self, tool_name: str, executor: Callable) -> None:
@@ -141,7 +145,7 @@ class BaseAgent:
         self.on_event(evt)
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    async def _create_completion(self, client: AsyncOpenAI, **kwargs) -> Any:
+    async def _model_call(self, client: AsyncOpenAI, **kwargs) -> Any:
         """Single model call with bounded retry on transient errors.
 
         Scoped to just the network call so a retry never re-executes tools
@@ -149,13 +153,103 @@ class BaseAgent:
         """
         return await client.chat.completions.create(**kwargs)
 
+    async def _create_completion(self, client: AsyncOpenAI, **kwargs) -> Any:
+        """Cache-aware completion: SHA-256 cache hit skips the model call entirely.
+
+        Only deterministic calls (temperature == 0) are cached — non-zero
+        temperature is meant to vary, so caching it would be misleading.
+        """
+        from backend.core import llm_cache
+
+        cacheable = float(kwargs.get("temperature", 0.0)) == 0.0
+        key = None
+        if cacheable:
+            key = llm_cache.make_key(
+                model=kwargs.get("model", ""),
+                messages=kwargs.get("messages", []),
+                tools=kwargs.get("tools"),
+                temperature=kwargs.get("temperature", 0.0),
+                max_tokens=kwargs.get("max_tokens", 0),
+            )
+            hit = llm_cache.get(key)
+            if hit is not None:
+                logger.debug("LLM cache hit for %s", self.name)
+                return llm_cache.rehydrate_completion(hit)
+
+        response = await self._model_call(client, **kwargs)
+        if cacheable and key is not None:
+            llm_cache.put(key, llm_cache.serialize_completion(response))
+        return response
+
     async def run(
         self,
         messages: list[dict],
         run_id: str = "",
         context: Optional[dict] = None,
     ) -> AgentResult:
+        """Tiered execution: model (with retry) → deterministic fallback.
+
+        AGENT_FALLBACK_MODE controls behaviour:
+          force → skip the model entirely (deterministic demo mode)
+          auto  → fall back only when the model call fails (default)
+          off   → never fall back; surface the error
+        """
         run_id = run_id or str(uuid.uuid4())
+        from config.settings import get_settings
+        mode = get_settings().agent_fallback_mode
+
+        if self.supports_fallback and mode == "force":
+            return await self._run_fallback(run_id, context, reason="force mode")
+
+        try:
+            return await self._run_model(messages, run_id)
+        except Exception as e:
+            if not (self.supports_fallback and mode == "auto"):
+                raise
+            logger.warning("Agent '%s' → deterministic fallback (model error: %s)", self.name, e)
+            return await self._run_fallback(run_id, context, reason=f"model error: {e}")
+
+    async def _run_fallback(self, run_id: str, context: Optional[dict], reason: str) -> AgentResult:
+        from backend.agents.fallbacks import build_fallback
+
+        self._emit(run_id, TraceEventType.AGENT_START, {
+            "model": "deterministic_fallback", "reason": reason[:200], "tools_available": [],
+        })
+        raw = await build_fallback(self.name, context)
+
+        parsed = None
+        if not isinstance(raw, str) and self.response_format is not None:
+            try:
+                parsed = self.response_format.model_validate(raw)
+            except Exception as exc:
+                logger.warning("Fallback output for %s failed schema validation: %s", self.name, exc)
+
+        if isinstance(raw, str):
+            content = raw
+        elif parsed is not None:
+            content = json.dumps(self._result_payload(parsed), indent=2)
+        else:
+            content = json.dumps(raw, indent=2, default=str)
+
+        self._emit(run_id, TraceEventType.AGENT_COMPLETE, {
+            "content": content,
+            "structured_output": self._result_payload(parsed) if parsed is not None else raw,
+            "content_length": len(content),
+            "tool_calls_made": 0,
+            "warnings": [],
+            "fallback": True,
+            "fallback_reason": reason[:200],
+            "tokens": {"prompt": 0, "completion": 0},
+        })
+        return AgentResult(agent_name=self.name, content=content, parsed=parsed,
+                           tool_calls_made=[], token_usage={"prompt": 0, "completion": 0})
+
+    async def _run_model(
+        self,
+        messages: list[dict],
+        run_id: str,
+        context: Optional[dict] = None,
+    ) -> AgentResult:
         ensure_model_loaded(self.model_role)
         client: AsyncOpenAI = get_client(self.model_role)
         model: str = get_model_name(self.model_role)

@@ -9,6 +9,7 @@ const AGENT_ORDER = [
   'plan_generator',
   'readiness_critic',
   'engagement',
+  'assessment',
   'manager_insights',
   'retrospective',
 ]
@@ -19,6 +20,7 @@ const AGENT_LABELS: Record<string, string> = {
   plan_generator: 'Study Plan Generator',
   readiness_critic: 'Readiness Critic',
   engagement: 'Engagement Agent',
+  assessment: 'Assessment Agent',
   manager_insights: 'Manager Insights',
   retrospective: 'Retrospective',
   orchestrator: 'Orchestrator',
@@ -81,7 +83,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
   return (
     <div className="h-full flex flex-col bg-gray-900 text-gray-100 rounded-lg overflow-hidden">
       <div className="px-4 py-3 bg-gray-800 border-b border-gray-700 text-sm font-semibold">
-        Live Reasoning Panel {runId && <span className="text-gray-400 font-mono text-xs ml-2">{runId.slice(0, 8)}</span>}
+        Live Journey Trace {runId && <span className="text-gray-400 font-mono text-xs ml-2">{runId.slice(0, 8)}</span>}
       </div>
 
       {/* Agent pipeline status */}
@@ -110,7 +112,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
 
       {latestOutputs.length > 0 && (
         <div className="px-4 py-3 border-b border-gray-700 space-y-2 bg-gray-950/40">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Latest Agent Outputs</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Latest Step Summaries</div>
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {latestOutputs.map(({ agentName, content, structuredOutput, groundedness, warnings }) => (
               <details key={agentName} className="rounded border border-gray-800 bg-gray-900/70">
@@ -141,7 +143,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
       {/* Event log */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1 scrollbar-thin text-xs font-mono">
         {events.length === 0 && (
-          <p className="text-gray-500 text-center mt-8">Run a workflow to see live reasoning...</p>
+          <p className="text-gray-500 text-center mt-8">Build your plan to see each journey step complete...</p>
         )}
         {events.map((e) => (
           <div key={e.event_id} className={clsx(
@@ -182,14 +184,14 @@ export default function ReasoningPanel({ events, runId }: Props) {
       {/* HITL gate */}
       {hitlEvent && (
         <div className="px-4 py-3 bg-amber-900/40 border-t border-amber-700 text-xs text-amber-200">
-          ⏸ Human review required before plan is published
+          ⏸ Manager approval is required before this study plan is published
         </div>
       )}
 
       {/* Tool call count */}
       {toolCalls.length > 0 && (
         <div className="px-4 py-2 bg-gray-800 border-t border-gray-700 text-xs text-gray-400">
-          {toolCalls.length} tool calls · {events.length} total events
+          {toolCalls.length} workflow actions · {events.length} total updates
         </div>
       )}
     </div>

@@ -25,9 +25,6 @@ from backend.mcp_server.server import (
     compute_readiness_forecast,
 )
 
-# Fallback next-certification map (used if the Assessment Agent doesn't ground one).
-_NEXT_CERT = {"AZ-204": "AZ-305", "AZ-400": "AZ-500", "DP-203": "DP-300", "AZ-305": "AZ-400"}
-
 logger = logging.getLogger(__name__)
 
 
@@ -187,10 +184,21 @@ class WorkflowOrchestrator:
                 "cert_target": learner.cert_target,
             }))
 
+            # Shared context passed to every agent — powers the deterministic
+            # tier-3 fallback (backend/agents/fallbacks.py) when the model is
+            # unavailable or AGENT_FALLBACK_MODE=force.
+            base_ctx = {
+                "learner_obj": learner,
+                "learner_id": learner.learner_id,
+                "cert_id": learner.cert_target,
+                "team_id": learner.team_id,
+            }
+
             # ── Stage 1: Learner Intake ──────────────────────────────────────
             intake_result = await self.intake.run(
                 messages=[{"role": "user", "content": f"Parse and validate learner profile: {learner.model_dump_json()}"}],
                 run_id=run_id,
+                context=base_ctx,
             )
             ctx.set_output("intake", intake_result)
 
@@ -206,6 +214,7 @@ class WorkflowOrchestrator:
                     )
                 }],
                 run_id=run_id,
+                context=base_ctx,
             )
             ctx.set_output("curator", curator_result)
             curated_topics = _structured_payload(curator_result)
@@ -222,6 +231,7 @@ class WorkflowOrchestrator:
                     )
                 }],
                 run_id=run_id,
+                context={**base_ctx, "curated_topics": curated_topics},
             )
             ctx.set_output("plan_draft", plan_draft)
             plan_payload, synthesized_plan = await _canonicalize_plan_payload(
@@ -237,6 +247,12 @@ class WorkflowOrchestrator:
                     "synthesized": True,
                 }))
 
+            # Fabric IQ: weighted domain thresholds give the Critic semantic
+            # business meaning (which domains carry the most leverage) even if
+            # its model can't call tools.
+            from backend.iq.fabric_iq import get_fabric_iq
+            domain_thresholds = get_fabric_iq().get_domain_thresholds(learner.cert_target)
+
             critique_history = [plan_payload]
             for round_n in range(1, self.max_critique_rounds + 1):
                 critic_result = await self.critic.run(
@@ -244,13 +260,17 @@ class WorkflowOrchestrator:
                         "role": "user",
                         "content": (
                             f"Learner: {learner.model_dump_json()}\n\n"
+                            f"Fabric IQ weighted domain thresholds (highest leverage first):\n"
+                            f"{_as_text(domain_thresholds)}\n\n"
                             f"Study plan (round {round_n}):\n{_as_text(critique_history[-1])}\n\n"
-                            "Identify weaknesses: under-allocated topics, schedule conflicts, "
-                            "prerequisite ordering. Return objections as JSON list with "
-                            "severity red/amber, description, recommendation, citation."
+                            "Identify weaknesses: under-allocated high-leverage domains, schedule "
+                            "conflicts, prerequisite ordering. Weight objections by domain leverage. "
+                            "Return objections as JSON list with severity red/amber, description, "
+                            "recommendation, citation."
                         )
                     }],
                     run_id=run_id,
+                    context={**base_ctx, "plan": critique_history[-1]},
                 )
                 ctx.set_output(f"critic_round_{round_n}", critic_result)
                 critic_payload = _structured_payload(critic_result)
@@ -270,6 +290,7 @@ class WorkflowOrchestrator:
                         )
                     }],
                     run_id=run_id,
+                    context={**base_ctx, "curated_topics": curated_topics},
                 )
                 ctx.set_output(f"plan_revision_{round_n}", revised)
                 revised_payload, synthesized_revision = await _canonicalize_plan_payload(
@@ -322,6 +343,7 @@ class WorkflowOrchestrator:
                     )
                 }],
                 run_id=run_id,
+                context=base_ctx,
             )
             ctx.set_output("engagement", engagement_result)
             engagement_payload = _structured_payload(engagement_result)
@@ -355,6 +377,7 @@ class WorkflowOrchestrator:
                         )
                     }],
                     run_id=run_id,
+                    context={**base_ctx, "forecast": forecast},
                 )
                 ctx.set_output("assessment", assessment_result)
                 assessment_payload = _structured_payload(assessment_result)
@@ -369,7 +392,9 @@ class WorkflowOrchestrator:
                 if isinstance(assessment_payload, dict):
                     next_step = assessment_payload.get("next_step", "")
                 if not next_step:
-                    nxt = _NEXT_CERT.get(learner.cert_target, "")
+                    # Fabric IQ ontology is the single source of truth for the
+                    # 'advances_to' relationship.
+                    nxt = get_fabric_iq().get_next_certification(learner.cert_target)
                     next_step = (f"Recommend {nxt} as the next certification."
                                  if nxt else "Recommend an advanced certification next.")
                 emit(make_event(TraceEventType.READINESS_ADVANCE, "assessment", {
@@ -405,6 +430,7 @@ class WorkflowOrchestrator:
                         )
                     }],
                     run_id=run_id,
+                    context={**base_ctx, "curated_topics": curated_topics},
                 )
                 rem_payload, rem_synth = await _canonicalize_plan_payload(
                     learner, curated_topics, _structured_payload(remediation),
@@ -443,6 +469,7 @@ class WorkflowOrchestrator:
                     )
                 }],
                 run_id=run_id,
+                context=base_ctx,
             )
             ctx.set_output("manager", manager_result)
 
@@ -460,6 +487,7 @@ class WorkflowOrchestrator:
                         )
                     }],
                     run_id=run_id,
+                    context=base_ctx,
                 )
                 ctx.set_output("retrospective", retro_result)
 

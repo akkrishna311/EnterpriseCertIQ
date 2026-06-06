@@ -113,7 +113,7 @@ class FoundryIQClient:
                 r = await c.post(
                     f"{endpoint}/indexes/{index}/docs/search",
                     json={"search": query, "top": top_k, "select": "id,title,content,source_url"},
-                    headers={"api-key": self.s.azure_ai_api_key},
+                    headers={"api-key": self.s.azure_search_key or self.s.azure_ai_api_key},
                 )
                 r.raise_for_status()
                 hits = r.json().get("value", [])

@@ -5,5 +5,10 @@
   {"learner_id": "L-1009", "role": "Cloud Engineer", "cert_id": "AZ-204", "practice_score_avg": 78, "hours_studied": 22, "meeting_hours_pw": 16, "exam_outcome": "Pass"},
   {"learner_id": "L-1010", "role": "Cloud Engineer", "cert_id": "AZ-204", "practice_score_avg": 61, "hours_studied": 14, "meeting_hours_pw": 28, "exam_outcome": "Fail"},
   {"learner_id": "L-1011", "role": "DevOps Engineer", "cert_id": "AZ-400", "practice_score_avg": 76, "hours_studied": 20, "meeting_hours_pw": 22, "exam_outcome": "Pass"},
-  {"learner_id": "L-1012", "role": "Data Engineer", "cert_id": "DP-203", "practice_score_avg": 55, "hours_studied": 12, "meeting_hours_pw": 30, "exam_outcome": "Fail"}
+  {"learner_id": "L-1012", "role": "Data Engineer", "cert_id": "DP-203", "practice_score_avg": 55, "hours_studied": 12, "meeting_hours_pw": 30, "exam_outcome": "Fail"},
+  {"learner_id": "L-1016", "role": "AI Engineer", "cert_id": "AI-102", "practice_score_avg": 80, "hours_studied": 23, "meeting_hours_pw": 16, "exam_outcome": "Pass"},
+  {"learner_id": "L-1017", "role": "AI Engineer", "cert_id": "AI-102", "practice_score_avg": 63, "hours_studied": 15, "meeting_hours_pw": 26, "exam_outcome": "Fail"},
+  {"learner_id": "L-1018", "role": "Data Scientist", "cert_id": "DP-100", "practice_score_avg": 77, "hours_studied": 21, "meeting_hours_pw": 17, "exam_outcome": "Pass"},
+  {"learner_id": "L-1019", "role": "Data Scientist", "cert_id": "DP-100", "practice_score_avg": 58, "hours_studied": 13, "meeting_hours_pw": 29, "exam_outcome": "Fail"},
+  {"learner_id": "L-1020", "role": "AI Practitioner", "cert_id": "AI-900", "practice_score_avg": 85, "hours_studied": 11, "meeting_hours_pw": 20, "exam_outcome": "Pass"}
 ]

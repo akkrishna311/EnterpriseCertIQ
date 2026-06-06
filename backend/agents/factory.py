@@ -30,6 +30,7 @@ from backend.mcp_server.server import (
     foundry_iq_search,
     parse_learner_profile,
     compute_progress_series,
+    fabric_iq_semantics,
     DomainMasteryInput,
     ForecastInput,
     ServiceHeatmapInput,
@@ -37,6 +38,7 @@ from backend.mcp_server.server import (
     StudyPlanInput,
     CitationInput,
     FoundryIQInput,
+    FabricIQInput,
     LearnerProfileInput,
     ProgressSeriesInput,
 )
@@ -208,7 +210,31 @@ _OWN_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "fabric_iq_semantics",
+            "description": (
+                "Fabric IQ semantic layer: business meaning over the enterprise-learning "
+                "ontology. query_type ∈ {readiness_semantics, domain_thresholds, "
+                "role_certification_map, cohort_benchmark, intervention_effect, ontology}."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query_type": {"type": "string"},
+                    "cert_id": {"type": "string"},
+                    "role": {"type": "string"},
+                    "evidence_json": {"type": "string"},
+                },
+                "required": ["query_type"],
+            },
+        },
+    },
 ]
+
+# Stable index of the Fabric IQ tool within _OWN_TOOLS (appended last).
+_FABRIC_TOOL = _OWN_TOOLS[9:10]
 
 _LEARN_TOOLS = [
     {
@@ -273,6 +299,8 @@ async def _exec_own_tool(name: str, **kwargs):
         return await compute_service_heatmap.fn(ServiceHeatmapInput(**kwargs))
     if name == "compute_progress_series":
         return await compute_progress_series.fn(ProgressSeriesInput(**kwargs))
+    if name == "fabric_iq_semantics":
+        return await fabric_iq_semantics.fn(FabricIQInput(**kwargs))
     return {"error": f"Unknown tool: {name}"}
 
 
@@ -297,6 +325,8 @@ def build_agents(on_event=None) -> dict:
             temperature=temperature,
             max_tool_rounds=max_tool_rounds,
             on_event=on_event,
+            # Every agent has a deterministic tier-3 builder (backend/agents/fallbacks.py).
+            supports_fallback=True,
         )
         for tool in _OWN_TOOLS:
             tool_name = tool["function"]["name"]
@@ -329,7 +359,11 @@ def build_agents(on_event=None) -> dict:
     # (e.g. phi-4-reasoning) don't support tool-calling — in that case it
     # reasons over the plan/evidence passed in-context and emits objections
     # without tools. Forecast/mastery tools remain available via REST.
-    critic_tools = _OWN_TOOLS[2:3] + _OWN_TOOLS[5:8] if model_supports_tools("reasoning") else []
+    # Critic also gets the Fabric IQ semantic layer (domain thresholds /
+    # readiness semantics) so its objections reason over weighted business
+    # meaning, not just raw mastery numbers.
+    critic_tools = (_OWN_TOOLS[2:3] + _OWN_TOOLS[5:8] + _FABRIC_TOOL
+                    if model_supports_tools("reasoning") else [])
     critic = make_agent(
         "readiness_critic", "readiness_critic",
         critic_tools,
@@ -344,10 +378,12 @@ def build_agents(on_event=None) -> dict:
         temperature=0.1,
         response_format=EngagementOutput,
     )
+    # Manager gets Fabric IQ for semantic team skill-gap meaning + cohort
+    # benchmarks alongside profile parsing and grounded retrieval.
     manager = make_agent(
         "manager_insights",
         "manager_insights",
-        _OWN_TOOLS[:2],
+        _OWN_TOOLS[:2] + _FABRIC_TOOL,
         temperature=0.1,
         response_format=ManagerInsightsOutput,
     )
