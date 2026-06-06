@@ -232,6 +232,8 @@ If you want strict criteria coverage with minimal Azure spend, the minimum Azure
 | `GET/POST/DELETE` | `/api/manager/{team_id}/interventions` | Persisted manager intervention queue |
 | `GET` | `/api/reports/learner/{lid}/{cid}.pdf` | Learner readiness PDF (demo-cached) |
 | `GET` | `/api/reports/manager/{team_id}.pdf` | Manager handoff brief PDF (demo-cached) |
+| `GET` | `/api/audio/learner/{lid}/{cid}/transcript` | Grounded two-host audio briefing transcript + citations |
+| `GET` | `/api/audio/learner/{lid}/{cid}.mp3` | Synthesized audio briefing (Azure AI Speech; 503 if unconfigured) |
 | `GET` | `/api/cache/stats` | LLM response-cache hit/miss/entry counters |
 | `GET` | `/api/cert-structures/{cert_id}` | Cert domain structure |
 | `GET` | `/docs` | Interactive Swagger UI |
@@ -373,6 +375,11 @@ enterprisecertiq/
   with a 0.8 pass threshold, run in CI with no credentials.
 - **PDF reports** (`backend/reports/pdf.py`) — learner readiness + manager handoff brief,
   demo-cached for instant repeat downloads.
+- **Grounded audio study briefing** (`backend/audio/podcast.py`) — a NotebookLM-style
+  **two-host podcast** generated *only* from approved cert content, with the transcript +
+  citations shown for provenance. Two-voice SSML → Azure AI Speech (REST); transcript works
+  with no key, audio synthesis is opt-in, MP3s demo-cached. Deterministic fallback → a full
+  script with zero model.
 - **Deterministic tier-3 fallback** (`backend/agents/fallbacks.py`) — every agent has a
   no-model deterministic builder. `AGENT_FALLBACK_MODE=auto` (default) degrades gracefully on
   a model error; `=force` runs the **entire pipeline with zero model calls** (instant,
@@ -396,6 +403,7 @@ enterprisecertiq/
 | Fabric IQ | Semantic ontology — roles, certs, weighted domains, thresholds, cohort outcomes |
 | Azure AI Content Safety | Live output screening (regex fallback offline) |
 | Azure AI Evaluation | Groundedness LLM-as-judge (Azure path) |
+| Azure AI Speech | Two-voice TTS for the grounded audio study briefing |
 | Azure Cosmos DB | Production storage (local JSON in dev) |
 | FastMCP | Own MCP server exposing 10 typed tools (incl. Fabric IQ semantics) |
 | ReportLab | Learner + manager PDF report generation |

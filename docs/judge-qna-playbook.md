@@ -17,6 +17,9 @@ claim to a file or a clickable artifact.
 5. **Download the Manager Handoff Brief PDF** and a **Learner Readiness PDF**.
 6. **/health** → show all 3 IQ layers, `content_safety: azure`, and the **LLM cache
    hit-rate** climbing when you re-run the same learner (instant, ~0 tokens).
+7. **Audio Briefing tab** → generate a grounded two-host "audio study briefing" (Coach +
+   Learner). Play the MP3, then point at the **transcript + citations** beside it — same
+   approved content, spoken. ("Study in your Thursday focus gap.")
 
 ## Scoring-criteria cheat sheet
 
@@ -25,8 +28,8 @@ claim to a file or a clickable artifact.
 | Accuracy & Relevance | All 5 baseline agents + manager insights + grounded cited questions | `backend/agents/factory.py`, Foundry IQ citations in trace |
 | Reasoning & Multi-step | 8 LLM agents, critic→revision loop, readiness loop-back, retrospective | `backend/core/workflow.py` |
 | Reliability & Safety | HITL gate, Azure Content Safety, PII/citation gate, 51 tests, rubric evals, LLM cache | `middleware/`, `evals/agent_rubrics.py`, `tests/` |
-| Creativity | What-if simulator, retrospective meta-agent, all-3-IQ each on a runtime path | `main.py` what-if, `iq/fabric_iq.py` |
-| UX & Presentation | Live deploy, SSE reasoning stream, PDF exports, charts | `docs/deployment.md`, frontend components |
+| Creativity | What-if simulator, retrospective meta-agent, grounded audio briefing, all-3-IQ each on a runtime path | `main.py` what-if, `audio/podcast.py`, `iq/fabric_iq.py` |
+| UX & Presentation | Live deploy, SSE reasoning stream, audio briefing, PDF exports, charts | `docs/deployment.md`, frontend components |
 
 ## Anticipated questions
 
@@ -71,6 +74,16 @@ bulletproof.
 Synthetic data only (`L-1001`/`EMP-001`/`TEAM-A`). Manager Insights never exposes individual
 exam scores — enforced and unit-tested (rubric check M3).
 
+**Q: The audio briefing — isn't that just NotebookLM?**
+Same idea, but defensible for enterprise learning. NotebookLM narrates arbitrary user docs;
+ours generates the two-host script **only from approved cert content** (Fabric IQ domains +
+Foundry IQ excerpts + the readiness forecast) and **shows the transcript with citations next
+to the audio** — so there's no hallucinated study advice in a format that's hard to fact-check.
+It's `backend/audio/podcast.py` (two-voice SSML → Azure AI Speech) + the `audio_curriculum`
+agent, with a deterministic fallback that produces a full grounded script with no model.
+The transcript works with no Speech key; audio synthesis is opt-in. Ties into the "study in
+the flow of work" Work IQ angle.
+
 **Q: Deployment?**
 Containerised (backend + frontend Dockerfiles), one-command Azure Container Apps deploy in
 `docs/deployment.md`; the nginx proxy keeps SSE streaming working in prod.
@@ -83,3 +96,5 @@ Containerised (backend + frontend Dockerfiles), one-command Azure Container Apps
   a Graph/Cosmos source.
 - **Hosted Agent Service** — we run as a FastAPI app with an in-process agent runtime on
   Container Apps, not (yet) as a Foundry Hosted Agent. Inference + IQ are already on Azure.
+- **Audio synthesis** needs an Azure AI Speech key (free F0 tier suffices). Without it the
+  **transcript is fully generated and cited** — only the spoken MP3 is gated. Opt-in by design.
