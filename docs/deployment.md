@@ -123,6 +123,87 @@ so the live reasoning stream works through the proxy).
 - Keep `FABRIC_IQ_ENDPOINT=local` and storage local to avoid extra spend; everything still
   runs. Flip to cloud per the migration guide when you want the full Azure story.
 
+## 6. Foundry Agent Service — Hosted Agent deployment
+
+Deploy EnterpriseCertIQ as a **Hosted Agent** in Foundry Agent Service so the pipeline
+runs as a managed agent endpoint rather than a self-hosted container app.
+
+This satisfies the "Hosted Agents in Foundry Agent Service" recommendation and gives you:
+- A dedicated Microsoft Entra-managed agent identity
+- Platform-managed scaling, session state, and lifecycle
+- Agents visible and traceable in the Azure AI Foundry portal
+
+### Prerequisites
+
+```bash
+# Ensure azure-ai-projects SDK is installed
+pip install azure-ai-projects
+```
+
+### Step 1: Build and push to Azure Container Registry
+
+```bash
+# Build the backend image (same Dockerfile, same image)
+az acr build -r $ACR -t enterprisecertiq-hosted-agent:latest .
+```
+
+### Step 2: Register agent definitions in Foundry
+
+At startup (when `MODEL_BACKEND=azure_foundry`), EnterpriseCertIQ automatically calls
+`register_all_agents()` from `backend/core/foundry_orchestration.py`, which registers
+all 8 pipeline agents in Foundry Agent Service using the `azure-ai-projects` SDK:
+
+```
+eciq-orchestrator      eciq-learner-intake      eciq-learning-path-curator
+eciq-study-plan-generator  eciq-readiness-critic  eciq-engagement-agent
+eciq-assessment-agent  eciq-manager-insights  eciq-retrospective
+```
+
+Each workflow run creates a Foundry Agent thread visible in the portal at:
+**AI Foundry → Your Project → Agents → Threads**
+
+### Step 3: Deploy as a Hosted Agent (Container Apps-based)
+
+```bash
+# Create a Foundry-managed Container Apps job for the backend
+az containerapp job create \
+  --name eciq-hosted-agent \
+  --resource-group $RG \
+  --environment eciq-env \
+  --image $ACR.azurecr.io/enterprisecertiq-hosted-agent:latest \
+  --registry-server $ACR.azurecr.io \
+  --trigger-type Manual \
+  --replica-timeout 600 \
+  --env-vars \
+    MODEL_BACKEND=azure_foundry \
+    AZURE_AI_PROJECT_ENDPOINT=https://<hub>.api.azureml.ms \
+    AZURE_AI_MODEL_DEPLOYMENT=gpt-4o \
+    AGENT_FALLBACK_MODE=auto \
+    ENABLE_TELEMETRY=true \
+    APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appi
+```
+
+### Step 4: Verify agent registration
+
+```python
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+
+client = AIProjectClient(
+    endpoint="https://<hub>.api.azureml.ms",
+    credential=DefaultAzureCredential(),
+)
+agents = list(client.agents.list_agents())
+print([a.name for a in agents])
+# ['eciq-orchestrator', 'eciq-learning-path-curator', ...]
+```
+
+### What judges see in the portal
+
+1. **Agents tab** — 8 named EnterpriseCertIQ agents with descriptions and instructions
+2. **Threads tab** — one thread per workflow run, with structured messages from each stage
+3. **Traces tab** — OpenTelemetry spans from each `agent.*` and `workflow.run` scope
+
 ## Alternative: frontend on Azure Static Web Apps
 
 You can host the SPA on **Static Web Apps** instead of a frontend container — build with

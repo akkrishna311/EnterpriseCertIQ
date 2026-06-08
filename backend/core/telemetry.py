@@ -130,3 +130,43 @@ def workflow_span(run_id: str, learner_id: str, cert: str) -> Generator:
         s.set_attribute("learner_id", learner_id)
         s.set_attribute("cert_id", cert)
         yield s
+
+
+@contextmanager
+def span(name: str, **attrs) -> Generator:
+    """Generic child span (e.g. model call, tool call) → App Insights dependency."""
+    tracer = _tracer
+    if tracer is None:
+        yield None
+        return
+    with tracer.start_as_current_span(name) as s:
+        for k, v in attrs.items():
+            if v is not None:
+                s.set_attribute(k, str(v))
+        yield s
+
+
+def instrument_fastapi(app) -> None:
+    """Auto-instrument FastAPI so every HTTP call is a tracked request in App Insights.
+    No-op when telemetry is disabled or the package is missing."""
+    if _tracer is None:
+        return
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("Telemetry: FastAPI instrumented (per-call request spans)")
+    except Exception as e:
+        logger.warning("Telemetry: FastAPI instrumentation skipped: %s", e)
+
+
+def shutdown_telemetry() -> None:
+    """Flush buffered spans on shutdown so nothing is lost (BatchSpanProcessor)."""
+    try:
+        from opentelemetry import trace
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "force_flush"):
+            provider.force_flush()
+        if hasattr(provider, "shutdown"):
+            provider.shutdown()
+    except Exception as e:  # pragma: no cover
+        logger.debug("Telemetry shutdown flush skipped: %s", e)

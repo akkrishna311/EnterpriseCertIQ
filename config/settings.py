@@ -44,7 +44,10 @@ class Settings(BaseSettings):
 
     # ── Azure AI Foundry (cloud backend) ─────────────────────────────
     # Get this from: AI Foundry portal → your project → Settings → Project details
-    azure_ai_project_endpoint: str = ""  # e.g. https://<hub>.api.azureml.ms
+    azure_ai_project_endpoint: str = ""  # e.g. https://<hub>.api.azureml.ms (azure-ai-projects/agents)
+    # OpenAI-compatible v1 endpoint, e.g. https://<res>.openai.azure.com/openai/v1
+    # When set (azure_foundry mode), inference uses the OpenAI SDK against this — most reliable.
+    azure_openai_endpoint: str = ""
     azure_ai_api_key: str = ""           # Leave empty to use DefaultAzureCredential
     azure_ai_api_version: str = "2024-12-01-preview"
     azure_ai_model_deployment: str = "gpt-4o"          # deployment name in your project

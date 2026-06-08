@@ -343,10 +343,11 @@ def build_agents(on_event=None) -> dict:
         _OWN_TOOLS[:3] + _LEARN_TOOLS,
         temperature=0.1,
         response_format=CuratedTopicList,
-        # Cap grounding rounds: tool-eager models (qwen) otherwise loop on
-        # MS Learn searches and make demo runs slow. 2 rounds is enough to
-        # ground via Foundry IQ + one MS Learn lookup.
-        max_tool_rounds=2,
+        # Cap grounding rounds: tool-eager models (qwen, gpt-5 family) otherwise
+        # loop on MS Learn searches. 4 rounds lets gpt-5-class models ground via
+        # Foundry IQ + finalise; if they still don't converge, the deterministic
+        # fallback yields valid topics anyway.
+        max_tool_rounds=4,
     )
     planner = make_agent(
         "plan_generator",
@@ -397,7 +398,8 @@ def build_agents(on_event=None) -> dict:
         response_format=AssessmentOutput,
         max_tool_rounds=3,
     )
-    retro = make_agent("retrospective", "retrospective", _OWN_TOOLS[:3])
+    # Retrospective is meta-reasoning over prior failures → use the reasoning model.
+    retro = make_agent("retrospective", "retrospective", _OWN_TOOLS[:3], model_role="reasoning")
 
     return {
         "intake": intake,

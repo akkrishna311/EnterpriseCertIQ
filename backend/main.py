@@ -55,8 +55,16 @@ async def lifespan(app: FastAPI):
     if kv.get("enabled"):
         logger.info("Key Vault: %d secret(s) loaded", kv.get("loaded", 0))
     setup_telemetry()
+    from backend.core.telemetry import instrument_fastapi, shutdown_telemetry
+    instrument_fastapi(app)  # per-call request spans → App Insights
+    # Pre-register agent definitions in Foundry Agent Service (Azure mode only; no-op locally)
+    from backend.core.foundry_orchestration import register_all_agents
+    registered = await register_all_agents()
+    if registered:
+        logger.info("Foundry agents registered: %d", len(registered))
     logger.info("EnterpriseCertIQ starting", backend=s.model_backend.value)
     yield
+    shutdown_telemetry()  # flush buffered spans
     logger.info("EnterpriseCertIQ shutting down")
 
 
@@ -664,12 +672,15 @@ async def run_workflow(req: RunWorkflowRequest):
     )
 
     async def _run():
+        from backend.core.foundry_orchestration import FoundrySession
         try:
-            ctx = await orchestrator.run(
-                learner,
-                on_event=lambda evt: _broadcast(run_id, evt),
-                run_id=run_id,
-            )
+            async with FoundrySession(run_id, learner.learner_id, learner.cert_target) as foundry:
+                ctx = await orchestrator.run(
+                    learner,
+                    on_event=lambda evt: (_broadcast(run_id, evt), foundry.relay_event(evt)),
+                    run_id=run_id,
+                )
+                await foundry.complete(ctx)
             # Save plan to storage
             final_plan = ctx.outputs.get("final_plan")
             if final_plan:
@@ -1306,3 +1317,173 @@ async def get_cert_structure(cert_id: str):
     if cert_id not in structures:
         raise HTTPException(status_code=404, detail=f"Cert {cert_id} not found")
     return structures[cert_id]
+
+
+# ── Evaluation & RAI endpoints ─────────────────────────────────────────────
+
+@app.get("/api/evals/groundedness/{run_id}")
+async def get_groundedness_eval(run_id: str):
+    """
+    Return the groundedness evaluation for a completed workflow run.
+    Uses azure-ai-evaluation SDK when MODEL_BACKEND=azure_foundry, otherwise
+    falls back to the fast heuristic evaluator.
+    """
+    from backend.evals.groundedness import evaluate_async, get_eval_model_config
+
+    trace = await storage.get_trace(run_id)
+    if not trace:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    # Collect agent output text from the trace events
+    outputs: list[str] = []
+    for evt in (trace.get("events") or []):
+        if not isinstance(evt, dict):
+            continue
+        data = evt.get("data") or {}
+        # Pull curator and critic text — the most citation-heavy agents
+        if evt.get("event_type") in ("tool_result", "agent_output"):
+            result = data.get("result") or data.get("output") or ""
+            text = json.dumps(result) if isinstance(result, (dict, list)) else str(result)
+            if text:
+                outputs.append(text)
+
+    combined = " ".join(outputs) if outputs else json.dumps(trace)
+    model_config = get_eval_model_config()
+    result = await evaluate_async(combined, model_config=model_config)
+
+    return {
+        "run_id": run_id,
+        "groundedness_score": result.score,
+        "passed": result.passed,
+        "citation_count": result.citation_count,
+        "assertion_count": result.assertion_count,
+        "uncited_sample": result.uncited_assertions[:3],
+        "evaluator": result.evaluator,
+        "note": (
+            "Evaluated using Azure AI Evaluation SDK (LLM judge)"
+            if result.evaluator == "azure_ai_evaluation"
+            else "Evaluated using heuristic citation-coverage score (configure MODEL_BACKEND=azure_foundry to enable LLM judge)"
+        ),
+    }
+
+
+@app.get("/api/evals/rubric/{run_id}")
+async def get_rubric_eval(run_id: str):
+    """
+    Run deterministic rubric checks (C1–C4, P1–P5, CR1–CR4, A1–A4, E1–E3, M1–M4, R1–R4)
+    against all stored agent outputs for a workflow run.
+    """
+    from backend.evals.agent_rubrics import batch_evaluate
+
+    trace = await storage.get_trace(run_id)
+    if not trace:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    # Gather agent outputs from trace events
+    samples: dict = {}
+    agent_map = {
+        "curator": "curator",
+        "plan_generator": "plan_generator",
+        "readiness_critic": "readiness_critic",
+        "assessment": "assessment",
+        "engagement": "engagement",
+        "manager_insights": "manager_insights",
+        "retrospective": "retrospective",
+    }
+    for evt in (trace.get("events") or []):
+        if not isinstance(evt, dict):
+            continue
+        agent = evt.get("agent_name", "")
+        if agent in agent_map and evt.get("event_type") in ("tool_result", "agent_output"):
+            samples.setdefault(agent_map[agent], evt.get("data", {}).get("result"))
+
+    return batch_evaluate({k: v for k, v in samples.items() if v is not None})
+
+
+@app.get("/api/rai/status")
+async def get_rai_status():
+    """
+    Return the current Responsible AI configuration — which controls are active,
+    their mode (Azure / local), and their effective settings.
+    Surfaced in the frontend Safety tab so judges can inspect the RAI posture at a glance.
+    """
+    content_safety_mode = (
+        "azure_ai_content_safety"
+        if s.azure_content_safety_endpoint and s.azure_content_safety_key
+        else "regex_fallback"
+    )
+    eval_mode = (
+        "azure_ai_evaluation"
+        if s.model_backend.value == "azure_foundry" and s.azure_ai_project_endpoint
+        else "heuristic"
+    )
+    foundry_orchestration = (
+        "azure_ai_foundry_agent_service"
+        if s.model_backend.value == "azure_foundry" and s.azure_ai_project_endpoint
+        else "custom_orchestrator_local"
+    )
+    return {
+        "rai_controls": [
+            {
+                "control": "Content Safety",
+                "mode": content_safety_mode,
+                "active": True,
+                "detail": (
+                    f"Azure AI Content Safety (severity threshold {s.azure_content_safety_threshold})"
+                    if content_safety_mode == "azure_ai_content_safety"
+                    else "Regex guardrail (blocklist: jailbreak, self-harm, violence patterns)"
+                ),
+                "categories": ["Hate", "SelfHarm", "Sexual", "Violence"],
+            },
+            {
+                "control": "PII Redaction",
+                "mode": "domain_aware",
+                "active": True,
+                "detail": (
+                    "Unconditional redaction of emails and phone numbers. "
+                    "Conditional redaction of names using a cert/role domain vocabulary to preserve technical terms."
+                ),
+            },
+            {
+                "control": "Citation Gate",
+                "mode": "pipeline_check",
+                "active": True,
+                "detail": "Flags agent outputs that lack citation markers. Applied to Curator, Assessment, and Critic agents.",
+            },
+            {
+                "control": "Bias Audit",
+                "mode": "regex_scan",
+                "active": True,
+                "detail": "Scans for gendered pronouns and role-stereotype patterns. Logs findings; does not block.",
+            },
+            {
+                "control": "Groundedness Evaluation",
+                "mode": eval_mode,
+                "active": True,
+                "detail": (
+                    "LLM-as-judge via azure-ai-evaluation SDK (GroundednessEvaluator)"
+                    if eval_mode == "azure_ai_evaluation"
+                    else "Heuristic citation-coverage score. Set MODEL_BACKEND=azure_foundry to enable LLM judge."
+                ),
+            },
+            {
+                "control": "HITL Approval Gate",
+                "mode": "human_in_the_loop",
+                "active": True,
+                "detail": "Study plans remain in 'draft' status until a human approves via /api/plans/approve.",
+            },
+            {
+                "control": "Foundry Agent Orchestration",
+                "mode": foundry_orchestration,
+                "active": True,
+                "detail": (
+                    "Workflow runs are registered and tracked as Azure AI Foundry Agent threads."
+                    if foundry_orchestration == "azure_ai_foundry_agent_service"
+                    else "Custom orchestrator (local mode). Set MODEL_BACKEND=azure_foundry for Foundry Agent Service tracking."
+                ),
+            },
+        ],
+        "ai_disclosure": "EnterpriseCertIQ applies Responsible AI controls at every stage. All outputs are AI-generated and require human review before use in employment or performance decisions.",
+        "model_backend": s.model_backend.value,
+        "content_safety_threshold": s.azure_content_safety_threshold,
+    }

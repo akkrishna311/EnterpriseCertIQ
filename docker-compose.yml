@@ -1,0 +1,83 @@
+# Local development stack — backend + frontend + optional MCP server.
+#
+# Usage:
+#   docker-compose up --build          # full stack, local mode (no Azure creds needed)
+#   docker-compose up --build -e MODEL_BACKEND=azure_foundry  # Azure mode
+#
+# The frontend nginx proxy forwards /api/* to the backend so the React app
+# works without CORS configuration changes.
+#
+# Credentials: create a .env.local file with any overrides before running.
+# Never commit .env.local or .env.azure — they are in .gitignore.
+
+version: '3.9'
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_AZURE: "true"   # set to "false" for a smaller local-only image
+    image: enterprisecertiq-backend:local
+    container_name: eciq-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.local          # local overrides (created from .env.example)
+    environment:
+      MODEL_BACKEND: ${MODEL_BACKEND:-foundry_local}
+      AGENT_FALLBACK_MODE: ${AGENT_FALLBACK_MODE:-auto}
+      ENABLE_TELEMETRY: ${ENABLE_TELEMETRY:-false}
+      ENABLE_LLM_CACHE: ${ENABLE_LLM_CACHE:-true}
+      # Foundry Local — override if running Foundry Local on a different port
+      FOUNDRY_LOCAL_ENDPOINT: ${FOUNDRY_LOCAL_ENDPOINT:-http://host.docker.internal:5273/v1}
+      FOUNDRY_LOCAL_MODEL_ALIAS: ${FOUNDRY_LOCAL_MODEL_ALIAS:-phi-4-mini}
+      # Azure AI Foundry (only needed when MODEL_BACKEND=azure_foundry)
+      AZURE_AI_PROJECT_ENDPOINT: ${AZURE_AI_PROJECT_ENDPOINT:-}
+      AZURE_AI_API_KEY: ${AZURE_AI_API_KEY:-}
+      AZURE_AI_MODEL_DEPLOYMENT: ${AZURE_AI_MODEL_DEPLOYMENT:-gpt-4o}
+      # IQ layers
+      FOUNDRY_IQ_ENDPOINT: ${FOUNDRY_IQ_ENDPOINT:-local}
+      WORK_IQ_SOURCE: ${WORK_IQ_SOURCE:-synthetic}
+      # Safety
+      AZURE_CONTENT_SAFETY_ENDPOINT: ${AZURE_CONTENT_SAFETY_ENDPOINT:-}
+      AZURE_CONTENT_SAFETY_KEY: ${AZURE_CONTENT_SAFETY_KEY:-}
+      # CORS — the nginx frontend container calls the backend on its internal name
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,http://frontend:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: enterprisecertiq-frontend:local
+    container_name: eciq-frontend
+    ports:
+      - "5173:80"
+    environment:
+      BACKEND_URL: "http://backend:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional: run the MCP server in its own container when you need it
+  # mcp:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   command: ["python", "-m", "backend.mcp_server"]
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     MODEL_BACKEND: ${MODEL_BACKEND:-foundry_local}
+  #   depends_on:
+  #     - backend

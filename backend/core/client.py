@@ -151,16 +151,71 @@ def _make_foundry_client(role: str = "default") -> FoundryClientAdapter:
 
 # ── Public API ─────────────────────────────────────────────────────────────
 
+def _needs_max_completion_tokens(model: str) -> bool:
+    """gpt-5 family and o-series reasoning models reject `max_tokens` and require
+    `max_completion_tokens`. gpt-4.x / gpt-4o still use `max_tokens`."""
+    m = (model or "").lower()
+    return m.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+class _V1Completions:
+    """Translates request params for models with newer constraints, then delegates."""
+    def __init__(self, client):
+        self._client = client
+
+    async def create(self, **kwargs):
+        model = kwargs.get("model", "")
+        if _needs_max_completion_tokens(model) and "max_tokens" in kwargs:
+            kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+        return await self._client.chat.completions.create(**kwargs)
+
+
+class _V1Chat:
+    def __init__(self, client):
+        self.completions = _V1Completions(client)
+
+
+class _AzureOpenAIV1Adapter:
+    """openai.AsyncOpenAI wrapper that adapts params per model (e.g. gpt-5 →
+    max_completion_tokens). Delegates everything else to the real client."""
+    def __init__(self, client):
+        self._client = client
+        self.chat = _V1Chat(client)
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+
+def _make_azure_openai_client():
+    """Azure AI Foundry's OpenAI-compatible v1 endpoint via the OpenAI SDK.
+
+    The newer *.services.ai.azure.com / *.openai.azure.com resources expose an
+    OpenAI-compatible surface at `<resource>.openai.azure.com/openai/v1`. Pointing
+    openai.AsyncOpenAI at it is the most reliable path — identical interface to the
+    Foundry Local client, so BaseAgent is unchanged. Wrapped so gpt-5 / o-series
+    deployments get `max_completion_tokens` automatically.
+    """
+    from openai import AsyncOpenAI
+    s = get_settings()
+    logger.info("Client: Azure OpenAI v1 → %s", s.azure_openai_endpoint)
+    return _AzureOpenAIV1Adapter(
+        AsyncOpenAI(base_url=s.azure_openai_endpoint, api_key=s.azure_ai_api_key)
+    )
+
+
 @lru_cache(maxsize=4)
 def get_client(role: str = "default"):
     """
     Returns a client for the active backend.
     - Foundry Local: openai.AsyncOpenAI (unchanged interface)
-    - Azure AI Foundry: FoundryClientAdapter (same interface, different transport)
+    - Azure OpenAI v1 endpoint (if AZURE_OPENAI_ENDPOINT set): openai.AsyncOpenAI
+    - Azure AI Foundry project endpoint: FoundryClientAdapter (azure-ai-inference)
     """
     s = get_settings()
     if s.model_backend == ModelBackend.FOUNDRY_LOCAL:
         return _make_local_client()
+    if s.azure_openai_endpoint:
+        return _make_azure_openai_client()
     return _make_foundry_client(role)
 
 

@@ -131,6 +131,21 @@ def _rubric_manager(payload: Any) -> RubricResult:
     return r.finalize()
 
 
+def _rubric_retrospective(payload: Any) -> RubricResult:
+    r = RubricResult("retrospective")
+    d = _as_dict(payload)
+    valid_causes = {"engagement_gap", "retrieval_quality", "plan_quality", "skill_gap", "mixed"}
+    r.add("R1", "root_cause is one of the valid taxonomy values",
+          d.get("root_cause") in valid_causes)
+    r.add("R2", "Evidence list is non-empty",
+          len(d.get("evidence", [])) >= 1)
+    r.add("R3", "Recovery recommendations present",
+          len(d.get("recovery_recommendations", [])) >= 1)
+    r.add("R4", "next_plan_adjustments present with extra_hours_on_weak_areas",
+          isinstance(d.get("next_plan_adjustments", {}).get("extra_hours_on_weak_areas"), dict))
+    return r.finalize()
+
+
 _RUBRICS: dict[str, Callable[[Any], RubricResult]] = {
     "curator": _rubric_curator,
     "plan_generator": _rubric_plan,
@@ -138,6 +153,7 @@ _RUBRICS: dict[str, Callable[[Any], RubricResult]] = {
     "assessment": _rubric_assessment,
     "engagement": _rubric_engagement,
     "manager_insights": _rubric_manager,
+    "retrospective": _rubric_retrospective,
 }
 
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle, Headphones } from 'lucide-react'
+import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle, Headphones, ShieldCheck } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { api, streamEvents, type TraceEvent, type AssessmentResult, type Forecast, type MasteryGrid, type ProgressSnapshot } from '../api/client'
 import ReasoningPanel from '../components/ReasoningPanel'
@@ -13,6 +13,7 @@ import PassThresholdGauge from '../components/PassThresholdGauge'
 import AIDisclosureBanner from '../components/AIDisclosureBanner'
 import StudyPlanView, { type StudyPlan } from '../components/StudyPlanView'
 import AudioBriefing from '../components/AudioBriefing'
+import RAIPanel from '../components/RAIPanel'
 
 function mergeObjections(existing: any[], incoming: any[]): any[] {
   const merged = [...existing]
@@ -30,7 +31,7 @@ function mergeObjections(existing: any[], incoming: any[]): any[] {
   return merged
 }
 
-type TabKey = 'reasoning' | 'plan' | 'critic' | 'progress' | 'readiness' | 'assessment' | 'audio'
+type TabKey = 'reasoning' | 'plan' | 'critic' | 'progress' | 'readiness' | 'assessment' | 'audio' | 'safety'
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'reasoning', label: 'Journey Trace', icon: <Zap size={14} /> },
@@ -40,6 +41,7 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'readiness', label: 'Exam Readiness', icon: <Target size={14} /> },
   { key: 'assessment', label: 'Practice Exam', icon: <BookOpen size={14} /> },
   { key: 'audio', label: 'Audio Briefing', icon: <Headphones size={14} /> },
+  { key: 'safety', label: 'Safety & RAI', icon: <ShieldCheck size={14} /> },
 ]
 
 const DIFFICULTIES = ['Mixed', 'Easy', 'Medium', 'Hard'] as const
@@ -519,7 +521,14 @@ export default function LearnerView() {
 
           {activeTab === 'audio' && learner && (
             <div className="mt-3">
-              <AudioBriefing learnerId={selectedLearner} certId={learner.cert_target} />
+              <AudioBriefing key={`${selectedLearner}:${learner.cert_target}`}
+                learnerId={selectedLearner} certId={learner.cert_target} />
+            </div>
+          )}
+
+          {activeTab === 'safety' && (
+            <div className="mt-3">
+              <RAIPanel runId={runId} />
             </div>
           )}
 

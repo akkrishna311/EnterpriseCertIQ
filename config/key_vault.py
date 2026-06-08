@@ -67,8 +67,13 @@ def load_key_vault_secrets() -> dict:
     for kv_name, attr in SECRET_MAP.items():
         try:
             value = client.get_secret(kv_name).value
-        except Exception:
-            continue  # secret simply not present in this vault — fine
+        except Exception as e:
+            # Auth failure (e.g. no `az login` locally) → stop early instead of
+            # retrying every secret; fall back to env values.
+            if e.__class__.__name__ == "ClientAuthenticationError":
+                logger.warning("Key Vault: auth unavailable (%s) — using env values", e.__class__.__name__)
+                break
+            continue  # this secret simply isn't in the vault — try the next
         if value:
             try:
                 setattr(s, attr, value)

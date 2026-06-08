@@ -23,8 +23,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    SearchIndex, SimpleField, SearchableField, SearchFieldDataType,
+)
 
 from config.settings import get_settings
+
+
+def ensure_index(endpoint: str, index: str, key: str) -> None:
+    """Create the index if it doesn't exist (idempotent) so seeding works on a
+    fresh search service."""
+    ic = SearchIndexClient(endpoint, AzureKeyCredential(key))
+    existing = {i.name for i in ic.list_indexes()}
+    if index in existing:
+        print(f"Index '{index}' already exists.")
+        return
+    ic.create_index(SearchIndex(name=index, fields=[
+        SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+        SearchableField(name="title", type=SearchFieldDataType.String),
+        SearchableField(name="content", type=SearchFieldDataType.String),
+        SimpleField(name="source_url", type=SearchFieldDataType.String),
+    ]))
+    print(f"Created index '{index}'.")
 
 CERT_LEARN_URLS = {
     "AZ-204": "https://learn.microsoft.com/credentials/certifications/azure-developer/",
@@ -53,6 +74,7 @@ def main() -> int:
               "AZURE_SEARCH_KEY in your environment / .env before running.")
         return 1
 
+    ensure_index(endpoint, index, key)
     client = SearchClient(endpoint, index, AzureKeyCredential(key))
     repo_root = Path(__file__).resolve().parent.parent
     docs = []

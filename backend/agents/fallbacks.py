@@ -191,16 +191,116 @@ async def _fallback_assessment(context: dict) -> dict:
 
 
 async def _fallback_manager(context: dict) -> dict:
+    import json
+    from pathlib import Path
+    from config.settings import get_settings
+
     learner = _learner_obj(context)
-    team_id = context.get("team_id", getattr(learner, "team_id", "TEAM"))
+    team_id = context.get("team_id", getattr(learner, "team_id", "TEAM-A"))
+
+    # Load team roster and all learner profiles from synthetic store
+    data_dir = Path(get_settings().data_dir) / "synthetic"
+    try:
+        teams_raw = json.loads((data_dir / "teams.json").read_text())
+        learners_raw = json.loads((data_dir / "learners.json").read_text())
+    except Exception:
+        teams_raw, learners_raw = [], []
+
+    team = next((t for t in teams_raw if t.get("team_id") == team_id), None)
+    member_ids: list[str] = team.get("members", []) if team else (
+        [getattr(learner, "learner_id", "L-0000")] if learner else []
+    )
+    members = [l for l in learners_raw if l.get("learner_id") in member_ids]
+
+    # Capacity risk per member
+    capacity_conflicts: list[str] = []
+    at_risk = 0
+    on_track = 0
+    for m in members:
+        sig = m.get("work_iq_signals", {})
+        mtg = sig.get("meeting_hours_per_week", 0)
+        if mtg >= 25:
+            at_risk += 1
+            capacity_conflicts.append(m["learner_id"])
+        else:
+            on_track += 1
+    insuff = max(0, len(members) - on_track - at_risk)
+
+    # Peer learning pairs: match on complementary domain mastery
+    # Use prior_assessment_evidence as a mastery proxy
+    peer_pairs = []
+    paired: set = set()
+    for i, m_a in enumerate(members):
+        if m_a["learner_id"] in paired:
+            continue
+        ev_a = m_a.get("prior_assessment_evidence") or {}
+        if not ev_a:
+            continue
+        # Find the weakest domain for m_a
+        weakest = min(ev_a, key=lambda k: ev_a[k]) if ev_a else None
+        if weakest is None:
+            continue
+        # Find a peer who is stronger in that domain and shares the same cert target
+        for m_b in members[i + 1:]:
+            if m_b["learner_id"] in paired:
+                continue
+            if m_b.get("cert_target") != m_a.get("cert_target"):
+                continue
+            ev_b = m_b.get("prior_assessment_evidence") or {}
+            strength_b = ev_b.get(weakest, 0)
+            gap_a = ev_a.get(weakest, 0)
+            if strength_b - gap_a >= 0.10:
+                peer_pairs.append({
+                    "learner_a": m_b["learner_id"],
+                    "learner_b": m_a["learner_id"],
+                    "gap": weakest,
+                    "rationale": (
+                        f"{m_b['learner_id']} is stronger in {weakest.replace('_', ' ')} "
+                        f"({int(strength_b * 100)}%) and can mentor "
+                        f"{m_a['learner_id']} ({int(gap_a * 100)}%)."
+                    ),
+                })
+                paired.add(m_a["learner_id"])
+                paired.add(m_b["learner_id"])
+                break
+
+    # Manager actions derived from capacity and evidence
+    actions: list[str] = []
+    if capacity_conflicts:
+        actions.append(
+            f"Protect study blocks for {', '.join(capacity_conflicts)} — meeting load >25 h/wk."
+        )
+    if peer_pairs:
+        actions.append(
+            f"Facilitate {len(peer_pairs)} peer-learning session(s) flagged by domain mastery gap."
+        )
+    actions.append("Run mock assessments for all team members before deadline.")
+
+    risk_areas: list[str] = []
+    if capacity_conflicts:
+        risk_areas.append(
+            f"{len(capacity_conflicts)} member(s) carry >25 h/wk meetings — study completion at risk."
+        )
+    risk_areas.append("Ensure all learners complete at least one practice exam before certification date.")
+
+    summary = (
+        f"Team {team_id} — {len(members)} member(s). "
+        f"{on_track} on track, {at_risk} at capacity risk. "
+        f"{len(peer_pairs)} peer-learning pair(s) identified by domain mastery gap. {_DISCLOSURE}."
+    )
+
     return {
         "team_id": team_id,
-        "summary": f"Team {team_id}: deterministic readiness summary (model unavailable).",
-        "readiness_distribution": {"on_track": 0, "at_risk": 1, "insufficient_evidence": 0},
-        "capacity_conflicts": [],
-        "risk_areas": ["Generated without model — see /api/manager/{team}/insights for full analysis."],
-        "peer_learning_pairs": [],
-        "manager_actions": ["Review the full manager insights endpoint for Fabric IQ skill gaps."],
+        "summary": summary,
+        "readiness_distribution": {
+            "on_track": on_track,
+            "at_risk": at_risk,
+            "insufficient_evidence": insuff,
+        },
+        "capacity_conflicts": capacity_conflicts,
+        "risk_areas": risk_areas,
+        "peer_learning_pairs": peer_pairs,
+        "manager_actions": actions,
         "ai_disclosure": _DISCLOSURE,
     }
 
@@ -291,13 +391,64 @@ async def _fallback_audio(context: dict) -> dict:
     }
 
 
-async def _fallback_retrospective(context: dict) -> str:
+async def _fallback_retrospective(context: dict) -> dict:
+    from backend.iq.fabric_iq import get_fabric_iq
     learner = _learner_obj(context)
+    cert_id = context.get("cert_id", getattr(learner, "cert_target", ""))
     attempts = getattr(learner, "prior_attempts", []) if learner else []
     n = len(attempts)
-    return (f"Retrospective (deterministic): {n} prior attempt(s) reviewed. "
-            "Likely contributors: under-allocated high-leverage domains and capacity "
-            f"pressure. Recommend targeted remediation on the weakest domain. [{_DISCLOSURE}]")
+
+    # Pull the most recent attempt's data if available
+    last = None
+    if attempts:
+        last_raw = attempts[-1]
+        last = last_raw.model_dump() if hasattr(last_raw, "model_dump") else dict(last_raw)
+
+    prior_score = last.get("score") if last else None
+    prior_date = last.get("date") if last else None
+    weak_areas = last.get("weak_areas", []) if last else []
+
+    # Root cause heuristic: check capacity vs skill gap
+    work_signals = getattr(learner, "work_iq_signals", None) if learner else None
+    meeting_hrs = getattr(work_signals, "meeting_hours_per_week", 20) if work_signals else 20
+    available_hrs = getattr(work_signals, "available_study_hours_per_week", 0) if work_signals else 0
+
+    if meeting_hrs >= 25:
+        root_cause = "engagement_gap"
+        evidence_msg = f"Meeting load {meeting_hrs}h/wk left only {available_hrs}h for study — plan adherence was structurally compromised."
+    elif weak_areas:
+        root_cause = "skill_gap"
+        evidence_msg = f"Weak areas identified: {', '.join(str(w) for w in weak_areas[:3])}. These domains were under-weighted in the prior plan."
+    else:
+        root_cause = "plan_quality"
+        evidence_msg = "Prior plan likely under-allocated high-leverage domains based on cert structure weights."
+
+    # Compute extra hours recommendation from Fabric IQ semantic weights
+    thresholds = get_fabric_iq().get_domain_thresholds(cert_id)
+    high_leverage = [d for d in thresholds if d.get("priority") == "high"]
+    extra_hours: dict = {d["name"]: round(d["weight_pct"] / 10, 1) for d in high_leverage[:3]}
+
+    return {
+        "learner_id": getattr(learner, "learner_id", "L-0000"),
+        "prior_attempt_date": prior_date or "unknown",
+        "prior_score": prior_score,
+        "root_cause": root_cause,
+        "evidence": [
+            evidence_msg,
+            f"{n} prior attempt(s) reviewed.",
+            "Remediation should front-load highest-leverage domains before re-sitting.",
+        ],
+        "recovery_recommendations": [
+            "Use short daily sessions (30–45 min) instead of weekly blocks.",
+            f"Focus first on: {', '.join(str(w) for w in weak_areas[:2]) or 'highest-weight cert domain'}.",
+            "Schedule a mock exam before re-sitting the real exam.",
+        ],
+        "next_plan_adjustments": {
+            "extra_hours_on_weak_areas": extra_hours,
+            "session_length_preference": "short_daily",
+        },
+        "ai_disclosure": f"AI-generated postmortem; system self-assessment only. {_DISCLOSURE}",
+    }
 
 
 _BUILDERS = {

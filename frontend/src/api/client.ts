@@ -66,6 +66,9 @@ export const api = {
     `/audio/learner/${lid}/${cid}/transcript${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
   audioUrl: (lid: string, cid: string, focus?: string) =>
     `/api/audio/learner/${lid}/${cid}.mp3${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`,
+  raiStatus: () => fetchJSON<RAIStatus>('/rai/status'),
+  groundednessEval: (runId: string) => fetchJSON<GroundednessEval>(`/evals/groundedness/${runId}`),
+  rubricEval: (runId: string) => fetchJSON<RubricEval>(`/evals/rubric/${runId}`),
   managerInsights: (tid: string) => fetchJSON<TeamInsights>(`/manager/${tid}/insights`),
   managerWhatIf: (tid: string, body: ManagerWhatIfRequest) => postJSON<ManagerWhatIfResult>(`/manager/${tid}/what-if`, body),
   peerSessions: (tid: string) => fetchJSON<PeerLearningSession[]>(`/manager/${tid}/peer-sessions`),
@@ -350,4 +353,49 @@ export interface TraceEvent {
   event_type: string
   agent_name: string
   data: Record<string, unknown>
+}
+
+export interface RAIControl {
+  control: string
+  mode: string
+  active: boolean
+  detail: string
+  categories?: string[]
+}
+
+export interface RAIStatus {
+  rai_controls: RAIControl[]
+  ai_disclosure: string
+  model_backend: string
+  content_safety_threshold: number
+}
+
+export interface GroundednessEval {
+  run_id: string
+  groundedness_score: number
+  passed: boolean
+  citation_count: number
+  assertion_count: number
+  uncited_sample: string[]
+  evaluator: string
+  note: string
+}
+
+export interface RubricCheck {
+  id: string
+  description: string
+  passed: boolean
+}
+
+export interface RubricAgentResult {
+  score: number
+  passed: boolean
+  checks: RubricCheck[]
+}
+
+export interface RubricEval {
+  results: Record<string, RubricAgentResult>
+  mean_score: number
+  all_passed: boolean
+  threshold: number
 }

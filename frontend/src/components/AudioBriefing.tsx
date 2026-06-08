@@ -14,15 +14,17 @@ export default function AudioBriefing({ learnerId, certId }: { learnerId: string
   const [data, setData] = useState<AudioTranscript | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Load the concept menu (with the weakest one flagged) when the learner/cert changes.
+  // Load the concept menu (with the weakest one flagged) once on mount. The parent
+  // remounts this component via `key` when the learner/cert changes, so state resets
+  // cleanly here — no setState churn that could loop.
   useEffect(() => {
     let alive = true
-    setConcepts(null); setData(null); setFocus('weakest')
     api.audioConcepts(learnerId, certId)
       .then((c) => { if (alive) setConcepts(c) })
       .catch(() => { /* concepts are optional; generate still works */ })
     return () => { alive = false }
-  }, [learnerId, certId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function generate() {
     setLoading(true); setError(null)

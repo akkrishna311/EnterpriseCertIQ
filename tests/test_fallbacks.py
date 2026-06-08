@@ -59,11 +59,19 @@ async def test_assessment_fallback_verdict_consistent():
 
 
 @pytest.mark.asyncio
-async def test_intake_and_retrospective_fallback_text():
+async def test_intake_fallback_text():
     intake = await build_fallback("learner_intake", _ctx())
-    retro = await build_fallback("retrospective", _ctx())
     assert isinstance(intake, str) and "L-1004" in intake
-    assert isinstance(retro, str) and "fallback" in retro.lower()
+
+
+@pytest.mark.asyncio
+async def test_retrospective_fallback_is_structured_and_valid():
+    retro = await build_fallback("retrospective", _ctx())
+    assert isinstance(retro, dict)
+    assert retro["root_cause"] in {"engagement_gap", "retrieval_quality",
+                                   "plan_quality", "skill_gap", "mixed"}
+    assert retro.get("recovery_recommendations")
+    assert evaluate_agent_output("retrospective", retro).passed
 
 
 @pytest.mark.asyncio

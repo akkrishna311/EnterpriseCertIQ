@@ -147,13 +147,25 @@ def get_eval_model_config() -> Optional[dict]:
     try:
         from config.settings import get_settings, ModelBackend
         s = get_settings()
-        if s.model_backend == ModelBackend.AZURE_FOUNDRY and s.azure_ai_project_endpoint:
-            return {
-                "azure_endpoint": s.azure_ai_project_endpoint,
-                "api_key": s.azure_ai_api_key or None,
-                "azure_deployment": s.azure_ai_model_deployment,
-                "api_version": s.azure_ai_api_version,
-            }
+        # azure-ai-evaluation's GroundednessEvaluator sends `max_tokens` internally,
+        # which gpt-5 / o-series deployments reject. Use the heuristic evaluator for
+        # those (returning None falls back) rather than spamming 400s.
+        _dep = (s.azure_ai_model_deployment or "").lower()
+        if _dep.startswith(("gpt-5", "o1", "o3", "o4")):
+            return None
+        if s.model_backend == ModelBackend.AZURE_FOUNDRY:
+            # azure-ai-evaluation needs the Azure OpenAI *resource base*
+            # (https://<res>.openai.azure.com), not the /openai/v1 surface or the
+            # projects endpoint. Derive it from azure_openai_endpoint when set.
+            base = (s.azure_openai_endpoint or "").split("/openai/")[0]
+            azure_endpoint = base or s.azure_ai_project_endpoint
+            if azure_endpoint:
+                return {
+                    "azure_endpoint": azure_endpoint,
+                    "api_key": s.azure_ai_api_key or None,
+                    "azure_deployment": s.azure_ai_model_deployment,
+                    "api_version": s.azure_ai_api_version,
+                }
     except Exception:
         pass
     return None

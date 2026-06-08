@@ -20,11 +20,18 @@ endpoint+key, Fabric uses its own SPN in tenant B — fully independent.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _in_azure() -> bool:
+    """True when running inside Azure (Container Apps / App Service / VM) where a
+    managed identity is reachable. Used to avoid the slow IMDS probe locally."""
+    return bool(os.environ.get("IDENTITY_ENDPOINT") or os.environ.get("MSI_ENDPOINT"))
 
 
 def _spn_fields(prefix: str) -> tuple[str, str, str]:
@@ -63,5 +70,9 @@ def get_service_credential(prefix: str, is_async: bool = False) -> Any:
         from azure.identity.aio import DefaultAzureCredential
     else:
         from azure.identity import DefaultAzureCredential
-    logger.debug("Azure credential for '%s': DefaultAzureCredential (shared identity)", prefix)
-    return DefaultAzureCredential()
+    # Skip the managed-identity IMDS probe when not in Azure — it hangs locally
+    # (the 169.254.169.254 endpoint only exists inside Azure).
+    exclude_mi = not _in_azure()
+    logger.debug("Azure credential for '%s': DefaultAzureCredential (exclude_managed_identity=%s)",
+                 prefix, exclude_mi)
+    return DefaultAzureCredential(exclude_managed_identity_credential=exclude_mi)

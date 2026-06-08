@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from backend.core.client import ensure_model_loaded, get_client, get_model_name
-from backend.core.telemetry import agent_span
+from backend.core.telemetry import agent_span, span
 from backend.evals.groundedness import evaluate_async, get_eval_model_config
 from backend.middleware.pipeline import apply_pipeline
 from backend.models.trace import TraceEvent, TraceEventType
@@ -151,7 +151,8 @@ class BaseAgent:
         Scoped to just the network call so a retry never re-executes tools
         or re-emits trace events for the whole agent run.
         """
-        return await client.chat.completions.create(**kwargs)
+        with span("model.call", agent=self.name, model=kwargs.get("model")):
+            return await client.chat.completions.create(**kwargs)
 
     async def _create_completion(self, client: AsyncOpenAI, **kwargs) -> Any:
         """Cache-aware completion: SHA-256 cache hit skips the model call entirely.
@@ -202,7 +203,7 @@ class BaseAgent:
             return await self._run_fallback(run_id, context, reason="force mode")
 
         try:
-            return await self._run_model(messages, run_id)
+            return await self._run_model(messages, run_id, context)
         except Exception as e:
             if not (self.supports_fallback and mode == "auto"):
                 raise
@@ -358,7 +359,8 @@ class BaseAgent:
                     executor = self._tool_executors.get(fn_name)
                     if executor:
                         try:
-                            result = await executor(**fn_args)
+                            with span("tool.call", agent=self.name, tool=fn_name):
+                                result = await executor(**fn_args)
                         except Exception as e:
                             result = {"error": str(e)}
                     else:
@@ -378,4 +380,10 @@ class BaseAgent:
                         "content": json.dumps(result) if not isinstance(result, str) else result,
                     })
 
+        # Model kept calling tools without finalising (some models are very
+        # tool-eager). Rather than return a useless marker, fall back to the
+        # deterministic builder so the stage still yields valid structured output.
+        if self.supports_fallback:
+            logger.warning("Agent '%s' hit max tool rounds → deterministic fallback", self.name)
+            return await self._run_fallback(run_id, context, reason="max tool rounds reached")
         return AgentResult(agent_name=self.name, content="[max tool rounds reached]")

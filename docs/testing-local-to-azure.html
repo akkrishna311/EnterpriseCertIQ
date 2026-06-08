@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Testing Guide: Local-First → Azure</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #222637;
+      --border: #2e3350;
+      --text: #e2e8f0;
+      --muted: #8892b0;
+      --accent: #7c9ef8;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+      --code-bg: #12151f;
+      --pill-green: #14532d;
+      --pill-yellow: #713f12;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      color: var(--muted);
+      max-width: 720px;
+    }
+
+    /* Golden rule callout */
+    .callout {
+      background: var(--surface2);
+      border-left: 4px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.5rem 0;
+      color: var(--muted);
+    }
+
+    .callout strong { color: var(--text); }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin: 1rem 0 2rem;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+
+    /* Phase sections */
+    .phase {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 2rem;
+      overflow: hidden;
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+
+    .phase-num {
+      background: var(--accent);
+      color: #0f1117;
+      font-weight: 800;
+      font-size: 0.75rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 99px;
+      letter-spacing: 0.05em;
+    }
+
+    .phase-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+    }
+
+    .badge-green  { background: var(--pill-green);  color: var(--green); }
+    .badge-yellow { background: var(--pill-yellow); color: var(--yellow); }
+
+    .phase-body { padding: 1.25rem 1.5rem; }
+
+    /* Section labels inside a phase */
+    .section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 1.25rem 0 0.4rem;
+    }
+
+    .section-label:first-child { margin-top: 0; }
+
+    h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 1rem 0 0.3rem;
+    }
+
+    p { margin: 0.4rem 0; color: var(--muted); }
+    p strong { color: var(--text); }
+
+    ul, ol {
+      padding-left: 1.4rem;
+      color: var(--muted);
+      margin: 0.4rem 0;
+    }
+
+    li { margin: 0.2rem 0; }
+    li strong { color: var(--text); }
+
+    /* Code blocks */
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: #cdd6f4;
+    }
+
+    code {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1rem 0.35rem;
+      font-size: 0.82rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      color: #89dceb;
+    }
+
+    pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; }
+
+    /* Verification boxes */
+    .verify {
+      background: #0c2a1a;
+      border: 1px solid #166534;
+      border-radius: 8px;
+      padding: 0.75rem 1.1rem;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #86efac;
+    }
+
+    .verify::before {
+      content: '✅ Proven when: ';
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    /* Warning / honest framing */
+    .note {
+      background: #1c1a0a;
+      border: 1px solid #713f12;
+      border-radius: 8px;
+      padding: 0.75rem 1.1rem;
+      margin-top: 0.75rem;
+      font-size: 0.88rem;
+      color: #fde68a;
+    }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; margin: 1rem 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    th {
+      text-align: left;
+      padding: 0.55rem 0.9rem;
+      background: var(--surface2);
+      color: var(--accent);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.55rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      vertical-align: top;
+    }
+
+    td:first-child { color: var(--text); font-weight: 500; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+
+    /* Bottom summary cards */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    @media (max-width: 600px) { .summary-grid { grid-template-columns: 1fr; } }
+
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+    }
+
+    .summary-card h4 {
+      font-size: 0.95rem;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .summary-card ol {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    /* Divider */
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+    /* Syntax-hint spans (non-interactive) */
+    .kw  { color: #c792ea; }
+    .str { color: #c3e88d; }
+    .cmt { color: #546e7a; }
+    .var { color: #89dceb; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Testing Guide: Local-First → Azure</h1>
+    <p>
+      Foundry IQ · Work IQ · Fabric IQ &nbsp;—&nbsp;
+      A hands-on, command-by-command guide to take EnterpriseCertIQ from the fully-local
+      synthetic setup to a real Azure-backed deployment, and to <strong>prove</strong> each
+      Microsoft IQ layer is actually live (not simulated). Each phase ends with a
+      <em>verification</em> you can show a judge.
+    </p>
+
+    <div class="callout" style="margin-top:1.25rem">
+      <strong>Golden rule:</strong> change <strong>one layer at a time</strong> and verify before
+      moving on. The repo is built so each switch is a config change, not a rewrite.
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <span class="badge badge-green">🟢 Runnable today</span>
+        <span style="color:var(--muted)">code path exists; only provision + set env</span>
+      </div>
+      <div class="legend-item">
+        <span class="badge badge-yellow">🟡 Adapter needed</span>
+        <span style="color:var(--muted)">small, well-scoped code addition required</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- PHASE 0 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 0</span>
+      <span class="phase-title">Local baseline — all synthetic, zero cloud cost</span>
+      <span class="badge badge-green">🟢</span>
+    </div>
+    <div class="phase-body">
+      <p>This is your control. Everything works offline with Foundry Local + the in-memory IQ layers.</p>
+
+      <div class="section-label">Setup</div>
+      <pre><code>cd enterprisecertiq
+cp .env.example .env.local        # if not already present</code></pre>
+
+      <div class="section-label">.env.local (local defaults)</div>
+      <pre><code><span class="var">MODEL_BACKEND</span>=foundry_local
+<span class="var">FOUNDRY_LOCAL_ENDPOINT</span>=http://localhost:5273/v1
+<span class="var">FOUNDRY_LOCAL_MODEL_ALIAS</span>=qwen2.5-7b
+<span class="var">STORAGE_BACKEND</span>=local
+<span class="var">FOUNDRY_IQ_ENDPOINT</span>=local
+<span class="var">FABRIC_IQ_ENDPOINT</span>=local
+<span class="var">ENABLE_TELEMETRY</span>=false</code></pre>
+
+      <div class="section-label">Run &amp; test</div>
+      <pre><code>./start.sh                         <span class="cmt"># first run installs deps + downloads model</span>
+source .venv/bin/activate
+pytest -q                          <span class="cmt"># 29 tests should pass</span></code></pre>
+
+      <div class="section-label">Verify each IQ layer</div>
+      <pre><code><span class="cmt"># Foundry IQ (grounded retrieval over local docs)</span>
+curl -s localhost:8000/api/cert-structures/AZ-204 | head -c 200
+
+<span class="cmt"># Fabric IQ (semantic ontology) — via the manager insights payload</span>
+curl -s localhost:8000/api/manager/TEAM-A/insights | python3 -m json.tool | grep -A3 fabric_iq
+
+<span class="cmt"># Work IQ (work-context signals) — embedded in the same payload</span>
+curl -s localhost:8000/api/manager/TEAM-A/insights | python3 -m json.tool | grep -i capacity</code></pre>
+
+      <p>Run a full workflow and watch all agents (incl. the Fabric-aware Critic) in the UI at
+      <strong>http://localhost:5173</strong>, or:</p>
+      <pre><code>curl -s -X POST localhost:8000/api/workflow/run \
+  -H 'content-type: application/json' \
+  -d '{"learner_id":"L-1004"}' | python3 -m json.tool</code></pre>
+
+      <div class="verify">29 tests pass, the manager payload contains a <code>fabric_iq</code>
+      block, and a workflow run completes with a critic objection that references domain leverage.</div>
+    </div>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 1</span>
+      <span class="phase-title">Move model inference to Azure AI Foundry</span>
+      <span class="badge badge-green">🟢</span>
+    </div>
+    <div class="phase-body">
+      <p>The highest-credibility, lowest-effort switch. Only the <em>model calls</em> move to Azure.</p>
+
+      <div class="section-label">Provision</div>
+      <ol>
+        <li>Create an <strong>Azure AI Foundry</strong> project (portal: ai.azure.com → New project).</li>
+        <li>Deploy a model (e.g. <code>gpt-4o</code>) — note the <strong>deployment name</strong>.</li>
+        <li>Copy the <strong>project endpoint</strong> (Settings → Project details).</li>
+      </ol>
+      <pre><code>source .venv/bin/activate
+pip install -r requirements.azure.txt</code></pre>
+
+      <div class="section-label">Configure — .env.azure</div>
+      <pre><code><span class="var">MODEL_BACKEND</span>=azure_foundry
+<span class="var">AZURE_AI_PROJECT_ENDPOINT</span>=https://&lt;your-hub&gt;.api.azureml.ms
+<span class="var">AZURE_AI_API_KEY</span>=&lt;key&gt;               <span class="cmt"># or leave empty + AZURE_USE_MANAGED_IDENTITY=true</span>
+<span class="var">AZURE_AI_MODEL_DEPLOYMENT</span>=gpt-4o
+<span class="var">AZURE_AI_REASONING_DEPLOYMENT</span>=gpt-4o
+<span class="cmt"># keep everything else local for now:</span>
+<span class="var">STORAGE_BACKEND</span>=local
+<span class="var">FOUNDRY_IQ_ENDPOINT</span>=local
+<span class="var">FABRIC_IQ_ENDPOINT</span>=local
+<span class="var">ENABLE_TELEMETRY</span>=false</code></pre>
+
+      <div class="callout">
+        <code>.env.local</code> overrides <code>.env.azure</code> (load order in <code>settings.py</code>).
+        For a clean Azure test, either delete/rename <code>.env.local</code> or set
+        <code>MODEL_BACKEND=azure_foundry</code> in it.
+      </div>
+
+      <div class="section-label">Run &amp; verify</div>
+      <pre><code>./start.sh --no-setup --skip-model  <span class="cmt"># no local model needed in Azure mode</span>
+curl -s localhost:8000/health       <span class="cmt"># expect backend: azure_foundry</span></code></pre>
+
+      <p>Run a workflow (as in Phase 0) and confirm:</p>
+      <ul>
+        <li>it completes end-to-end,</li>
+        <li>tool-calling still works (curator calls <code>foundry_iq_search</code>, critic calls <code>fabric_iq_semantics</code>),</li>
+        <li>the critic returns structured JSON.</li>
+      </ul>
+
+      <div class="verify"><code>/health</code> reports <code>azure_foundry</code> and a full run succeeds against the cloud model.</div>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 2</span>
+      <span class="phase-title">Foundry IQ — real grounded retrieval on Azure AI Search</span>
+      <span class="badge badge-green">🟢</span>
+    </div>
+    <div class="phase-body">
+      <p>Replace local keyword search with an Azure AI Search index. The Azure branch already exists
+      in <code>backend/iq/foundry_iq.py</code> (<code>_search_azure</code>).</p>
+
+      <div class="section-label">Provision</div>
+      <pre><code><span class="cmt"># Create a search service</span>
+az search service create -g &lt;rg&gt; -n &lt;search-name&gt; --sku basic -l &lt;region&gt;
+
+<span class="cmt"># Get the admin key + endpoint</span>
+az search admin-key show -g &lt;rg&gt; --service-name &lt;search-name&gt;
+<span class="cmt"># endpoint = https://&lt;search-name&gt;.search.windows.net</span></code></pre>
+
+      <div class="section-label">Ingest the synthetic corpus</div>
+      <p>Create one index (fields: <code>id</code>, <code>title</code>, <code>content</code>, <code>source_url</code>) and upload:</p>
+      <ul>
+        <li><code>backend/data/documents/cert_guide.md</code></li>
+        <li><code>backend/data/documents/team_report.md</code></li>
+        <li><code>backend/data/synthetic/cert_structures.json</code> (one doc per cert/domain)</li>
+      </ul>
+      <p>Easiest path: portal → <strong>Import data</strong> → upload to a Blob container → index it;
+      or use the <code>azure-search-documents</code> SDK to push documents. Name the index to match
+      <code>FOUNDRY_IQ_INDEX_NAME</code>.</p>
+
+      <div class="section-label">Configure</div>
+      <pre><code><span class="var">FOUNDRY_IQ_ENDPOINT</span>=https://&lt;search-name&gt;.search.windows.net
+<span class="var">FOUNDRY_IQ_INDEX_NAME</span>=cert-knowledge-base
+<span class="var">AZURE_AI_API_KEY</span>=&lt;search-admin-key-OR-reuse-foundry-key&gt;</span></code></pre>
+
+      <div class="callout">
+        <code>_search_azure</code> currently authenticates with <code>azure_ai_api_key</code> as the
+        Search <code>api-key</code> header. Use the Search admin key here, or harden the client to take
+        a dedicated <code>AZURE_SEARCH_KEY</code> (recommended — see migration doc Phase 2 hardening).
+      </div>
+
+      <div class="section-label">Verify it's really Azure</div>
+      <pre><code><span class="cmt"># Ask the curator to ground a topic, confirm citations carry a source_url</span>
+curl -s -X POST localhost:8000/api/workflow/run -H 'content-type: application/json' \
+  -d '{"learner_id":"L-1004"}' | python3 -m json.tool | grep -i source_url</code></pre>
+
+      <p>Then temporarily point <code>FOUNDRY_IQ_ENDPOINT</code> at a <strong>wrong</strong> index name —
+      retrieval should degrade/fail (proving it's hitting Azure, not local files). Restore afterwards.</p>
+
+      <div class="verify">Curator/assessment citations resolve to Azure-indexed documents
+      (<code>source_url</code> populated) and <code>validate_citation</code> succeeds against them.</div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 3</span>
+      <span class="phase-title">Work IQ — real work-context signals</span>
+      <span class="badge badge-yellow">🟡 Adapter needed</span>
+    </div>
+    <div class="phase-body">
+      <p>Today <code>backend/iq/work_iq.py</code> derives signals (meeting load, focus hours, capacity
+      risk, study slots) from synthetic <code>learners.json</code>. The <strong>logic stays</strong>;
+      only the <strong>source</strong> changes.</p>
+
+      <h3>Option A — Minimum viable cloud Work IQ (no M365 tenant required)</h3>
+      <ol>
+        <li>Put the synthetic work signals in Cosmos (Phase 5) or a Blob/table.</li>
+        <li>Add an <code>AzureWorkIQClient</code> alongside <code>WorkIQClient</code> with the same <code>WorkContext</code> shape:
+          <pre><code><span class="kw">class</span> <span class="str">AzureWorkIQClient</span>:
+    <span class="kw">async def</span> get_work_context(self, learner) -> WorkContext: ...
+    <span class="kw">async def</span> get_team_context(self, team_id, learners) -> dict: ...</code></pre>
+        </li>
+        <li>Select it in <code>get_work_iq()</code> when an Azure source is configured.</li>
+      </ol>
+      <p>This is "cloud-backed but synthetic" — honest and demoable.</p>
+
+      <h3>Option B — Real Microsoft 365 signals (needs a tenant)</h3>
+      <p>Use <strong>Microsoft Graph</strong> to derive the same fields:</p>
+      <ul>
+        <li><code>meeting_hours_per_week</code> → aggregate <code>/me/calendarView</code> over a week</li>
+        <li><code>focus_hours_per_week</code> → Graph Insights / Viva or a derived metric</li>
+        <li><code>preferred_learning_slot</code>, <code>upcoming_milestones</code> → user prefs / Planner / DevOps</li>
+      </ul>
+      <p>Register an Entra app, grant <code>Calendars.Read</code>, acquire a token, and populate
+      <code>WorkIQSignals</code> from Graph responses inside <code>AzureWorkIQClient</code>.</p>
+
+      <div class="section-label">Verify</div>
+      <pre><code>curl -s localhost:8000/api/manager/TEAM-A/insights | python3 -m json.tool | grep -i ai_disclosure
+<span class="cmt"># Should read "...derived from Microsoft 365 / Azure work signals"</span>
+<span class="cmt"># instead of "...synthetic Work IQ signals"</span></code></pre>
+
+      <div class="verify">The Engagement Agent's recommended slots and the manager's capacity-risk flags
+      change in response to cloud-sourced signals, with the disclosure string updated.</div>
+
+      <div class="note">
+        <strong>Honest framing for judges:</strong> until Option A or B ships, state plainly that "Work IQ
+        is synthetic." The <code>WorkContext</code> contract is the integration seam — agents don't change.
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 4</span>
+      <span class="phase-title">Fabric IQ — real semantic model on Microsoft Fabric</span>
+      <span class="badge badge-yellow">🟡 Adapter needed</span>
+    </div>
+    <div class="phase-body">
+      <p>Today <code>backend/iq/fabric_iq.py</code> builds the ontology in-memory from the synthetic JSON
+      and is already used by the Critic, Manager, and the <code>fabric_iq_semantics</code> MCP tool.
+      To make it <em>cloud Fabric</em>, bind the same <code>FabricIQClient</code> method contract to a
+      Fabric semantic model.</p>
+
+      <div class="section-label">Provision</div>
+      <ol>
+        <li>Create a <strong>Microsoft Fabric</strong> workspace (Lakehouse or Warehouse).</li>
+        <li>Load the synthetic data as tables in <strong>OneLake</strong>:
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Local file</th><th>Fabric table</th></tr></thead>
+              <tbody>
+                <tr><td><code>cert_structures.json</code></td><td><code>dim_certification</code>, <code>dim_skill_domain</code></td></tr>
+                <tr><td><code>learners.json</code></td><td><code>dim_learner</code>, <code>dim_role</code></td></tr>
+                <tr><td><code>cohort_outcomes.json</code></td><td><code>fact_cohort_outcome</code></td></tr>
+                <tr><td>assessments store</td><td><code>fact_assessment</code></td></tr>
+                <tr><td>manager_interventions store</td><td><code>fact_intervention</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </li>
+        <li>Build a <strong>semantic model</strong> capturing the relationships in <code>describe_ontology()</code>
+        (learner→team, role→cert, cert→domain, domain→weight/threshold, advances_to, etc.).</li>
+      </ol>
+
+      <div class="section-label">Configure</div>
+      <pre><code><span class="var">FABRIC_IQ_ENDPOINT</span>=https://&lt;fabric-sql-endpoint-or-onelake&gt;
+<span class="var">FABRIC_IQ_WORKSPACE</span>=&lt;workspace-name&gt;</code></pre>
+
+      <div class="section-label">Adapter (only code change)</div>
+      <p>In <code>fabric_iq.py</code>, branch on <code>self.s.fabric_iq_endpoint != "local"</code> inside each
+      query method. Keep the <strong>return shapes identical</strong> so the Critic, Manager, and MCP tool
+      are unchanged. Suggested queries to push down to Fabric SQL:</p>
+      <ul>
+        <li><code>get_domain_thresholds(cert_id)</code> → <code>SELECT … FROM dim_skill_domain WHERE cert_id=…</code></li>
+        <li><code>get_cohort_benchmark(cert_id)</code> → aggregate <code>fact_cohort_outcome</code></li>
+        <li><code>get_team_skill_gap_summary(...)</code> → join <code>fact_assessment × dim_skill_domain</code></li>
+        <li><code>get_intervention_effectiveness(...)</code> → <code>fact_intervention × outcomes</code></li>
+      </ul>
+
+      <div class="section-label">Verify it's really Fabric</div>
+      <pre><code><span class="cmt"># Confirm cohort_benchmarks sample_size matches Fabric row count (not 7 local rows)</span>
+curl -s localhost:8000/api/manager/TEAM-A/insights \
+  | python3 -m json.tool | grep -A2 sample_size</code></pre>
+      <p>Add a row to <code>fact_cohort_outcome</code> in Fabric and confirm <code>sample_size</code>/<code>pass_rate</code>
+      shifts without touching local JSON.</p>
+
+      <div class="verify">Fabric IQ outputs change in response to Fabric table edits and the
+      <code>ai_disclosure</code> reflects the Fabric source.</div>
+    </div>
+  </div>
+
+  <!-- PHASE 5 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 5</span>
+      <span class="phase-title">Persistence (Cosmos), Telemetry (App Insights), Eval</span>
+      <span class="badge badge-green">🟢</span>
+    </div>
+    <div class="phase-body">
+      <p>All three code paths already exist.</p>
+
+      <h3>Cosmos DB</h3>
+      <pre><code>az cosmosdb create -g &lt;rg&gt; -n &lt;cosmos-name&gt;
+az cosmosdb keys list -g &lt;rg&gt; -n &lt;cosmos-name&gt; --type keys</code></pre>
+      <pre><code><span class="var">STORAGE_BACKEND</span>=cosmos
+<span class="var">COSMOS_ENDPOINT</span>=https://&lt;cosmos-name&gt;.documents.azure.com:443/
+<span class="var">COSMOS_KEY</span>=&lt;key&gt;
+<span class="var">COSMOS_DATABASE</span>=enterprisecertiq</code></pre>
+      <p>Verify: run a workflow, restart the backend, reload the trace — it persists from Cosmos.</p>
+
+      <h3>Application Insights + Azure groundedness eval</h3>
+      <pre><code><span class="var">ENABLE_TELEMETRY</span>=true
+<span class="var">APPLICATIONINSIGHTS_CONNECTION_STRING</span>=InstrumentationKey=...</code></pre>
+      <p>Verify: run a workflow, then in the Azure portal → Application Insights →
+      <strong>Transaction search</strong>, confirm <code>workflow.run</code> and <code>agent.&lt;name&gt;</code>
+      spans appear with <code>run_id</code> + <code>cert_id</code>. Groundedness eval auto-uses
+      <code>azure-ai-evaluation</code> in Azure mode (<code>backend/evals/groundedness.py</code>).</p>
+    </div>
+  </div>
+
+  <!-- PHASE 6 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-num">PHASE 6</span>
+      <span class="phase-title">Host the app on Azure</span>
+      <span class="badge badge-yellow">🟡 Adapter needed</span>
+    </div>
+    <div class="phase-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Component</th><th>Azure service</th></tr></thead>
+          <tbody>
+            <tr><td>Backend</td><td>Azure Container Apps (or App Service)</td></tr>
+            <tr><td>Frontend</td><td>Azure Static Web Apps</td></tr>
+            <tr><td>Models</td><td>Azure AI Foundry (Phase 1)</td></tr>
+            <tr><td>Grounding</td><td>Azure AI Search (Phase 2)</td></tr>
+            <tr><td>Semantic</td><td>Microsoft Fabric (Phase 4)</td></tr>
+            <tr><td>State</td><td>Cosmos DB (Phase 5)</td></tr>
+            <tr><td>Telemetry</td><td>Application Insights (Phase 5)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:0.75rem">Containerise the FastAPI backend, push to ACR, deploy to Container Apps;
+      build the Vite frontend and deploy to Static Web Apps with the backend URL as its API base.</p>
+    </div>
+  </div>
+
+  <hr />
+
+  <!-- Switch matrix -->
+  <h2 style="font-size:1.1rem;color:var(--accent);margin-bottom:0.75rem">One-glance switch matrix</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Layer</th>
+          <th>Local setting</th>
+          <th>Azure setting</th>
+          <th>Code today</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Model</td>
+          <td><code>MODEL_BACKEND=foundry_local</code></td>
+          <td><code>MODEL_BACKEND=azure_foundry</code></td>
+          <td><span class="badge badge-green">🟢</span></td>
+        </tr>
+        <tr>
+          <td>Foundry IQ</td>
+          <td><code>FOUNDRY_IQ_ENDPOINT=local</code></td>
+          <td><code>=https://&lt;search&gt;.search.windows.net</code></td>
+          <td><span class="badge badge-green">🟢</span></td>
+        </tr>
+        <tr>
+          <td>Work IQ</td>
+          <td>synthetic <code>learners.json</code></td>
+          <td><code>AzureWorkIQClient</code> (Graph/Cosmos)</td>
+          <td><span class="badge badge-yellow">🟡 adapter</span></td>
+        </tr>
+        <tr>
+          <td>Fabric IQ</td>
+          <td><code>FABRIC_IQ_ENDPOINT=local</code></td>
+          <td><code>=&lt;Fabric/OneLake endpoint&gt;</code></td>
+          <td><span class="badge badge-yellow">🟡 adapter</span></td>
+        </tr>
+        <tr>
+          <td>Storage</td>
+          <td><code>STORAGE_BACKEND=local</code></td>
+          <td><code>=cosmos</code></td>
+          <td><span class="badge badge-green">🟢</span></td>
+        </tr>
+        <tr>
+          <td>Telemetry</td>
+          <td><code>ENABLE_TELEMETRY=false</code></td>
+          <td><code>=true</code> + conn string</td>
+          <td><span class="badge badge-green">🟢</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <h4>Minimum credible Azure demo (lowest cost)</h4>
+      <ol>
+        <li>Phase 1 (model) + Phase 2 (Foundry IQ) + Phase 5 (App Insights + eval).</li>
+        <li>Keep Work IQ synthetic and Fabric IQ local — but <strong>say so honestly</strong>.</li>
+        <li>That gives: real Foundry models, real grounded retrieval with citations,
+        real telemetry, real evaluation, all 3 IQ layers present (1 cloud + 2 local-but-real).</li>
+      </ol>
+    </div>
+    <div class="summary-card">
+      <h4>Full Microsoft story</h4>
+      <ol>
+        <li>Add Phase 3 (Work IQ adapter).</li>
+        <li>Add Phase 4 (Fabric semantic model).</li>
+        <li>Add Phase 6 (hosting).</li>
+        <li>All three IQ layers cloud-backed, app runs entirely on Azure.</li>
+      </ol>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

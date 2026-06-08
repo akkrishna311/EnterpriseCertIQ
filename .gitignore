@@ -36,3 +36,4 @@ backend/data/store/
 
 # Azure Developer CLI
 .azure/
+eval_results.json
