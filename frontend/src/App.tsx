@@ -2,6 +2,7 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-do
 import { Brain, LayoutDashboard, Users } from 'lucide-react'
 import LearnerView from './pages/LearnerView'
 import ManagerView from './pages/ManagerView'
+import ErrorBoundary from './components/ErrorBoundary'
 import clsx from 'clsx'
 
 function Nav() {
@@ -47,8 +48,8 @@ export default function App() {
         <Nav />
         <main className="flex-1 overflow-auto">
           <Routes>
-            <Route path="/" element={<LearnerView />} />
-            <Route path="/manager" element={<ManagerView />} />
+            <Route path="/" element={<ErrorBoundary><LearnerView /></ErrorBoundary>} />
+            <Route path="/manager" element={<ErrorBoundary><ManagerView /></ErrorBoundary>} />
           </Routes>
         </main>
       </div>

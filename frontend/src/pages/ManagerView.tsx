@@ -107,8 +107,8 @@ function formatWorkflowTimestamp(timestamp?: string): string {
   return Number.isNaN(parsed.getTime()) ? timestamp : parsed.toLocaleString()
 }
 
-function titleCaseLabel(value: string): string {
-  return value
+function titleCaseLabel(value: string | undefined | null): string {
+  return (value ?? '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
@@ -1214,7 +1214,7 @@ export default function ManagerView() {
                       <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
                         <div>
                           <p className="text-slate-400">Status</p>
-                          <p className="font-medium text-slate-800">{titleCaseLabel(session.status)}</p>
+                          <p className="font-medium text-slate-800">{titleCaseLabel(session.status ?? 'pinned')}</p>
                         </div>
                         <div>
                           <p className="text-slate-400">Manager note</p>

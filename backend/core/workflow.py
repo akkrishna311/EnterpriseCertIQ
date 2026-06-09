@@ -100,6 +100,29 @@ def _readiness_from_forecast(forecast) -> dict:
             "weakest_topic": forecast.get("weakest_topic", "")}
 
 
+async def _enrich_critic_payload(learner: LearnerProfile, critic_payload):
+    """Backfill the Critic's forecast / domain_mastery / objections deterministically so the
+    Plan Review surface is always rich, even when a reasoning model under-populates the
+    CriticOutput. Display-only — the loop's revise/break decision still uses the model's own
+    objections, so this never forces extra revision rounds.
+    """
+    from backend.agents.fallbacks import build_fallback
+    if not isinstance(critic_payload, dict):
+        critic_payload = {}
+    det = await build_fallback("readiness_critic", {
+        "learner_obj": learner, "cert_id": learner.cert_target,
+    })
+    if not critic_payload.get("forecast"):
+        critic_payload["forecast"] = det.get("forecast", {})
+    if not critic_payload.get("domain_mastery"):
+        critic_payload["domain_mastery"] = det.get("domain_mastery", {})
+    if not critic_payload.get("objections"):
+        critic_payload["objections"] = det.get("objections", [])
+    if not critic_payload.get("overall_risk"):
+        critic_payload["overall_risk"] = det.get("overall_risk", "medium")
+    return critic_payload
+
+
 class WorkflowContext:
     def __init__(self, learner: LearnerProfile, run_id: str):
         self.learner = learner
@@ -273,10 +296,18 @@ class WorkflowOrchestrator:
                     context={**base_ctx, "plan": critique_history[-1]},
                 )
                 ctx.set_output(f"critic_round_{round_n}", critic_result)
-                critic_payload = _structured_payload(critic_result)
+                model_payload = _structured_payload(critic_result)
+                model_has_red = _has_red_objection(model_payload)
+                # Enrich for the Plan Review surface (forecast + mastery + leverage objections)
+                # without changing the loop's revise/break decision.
+                critic_payload = await _enrich_critic_payload(learner, model_payload)
                 critique_history.append(critic_payload)
+                objections = critic_payload.get("objections") or []
+                if objections:
+                    emit(make_event(TraceEventType.CRITIC_OBJECTION, "readiness_critic",
+                                    {"objections": objections}))
 
-                if not _has_red_objection(critic_payload):
+                if not model_has_red:
                     logger.info("Critic satisfied after round %d", round_n)
                     break
 
