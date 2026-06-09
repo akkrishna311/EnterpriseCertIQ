@@ -146,6 +146,28 @@ def span(name: str, **attrs) -> Generator:
         yield s
 
 
+def instrument_foundry_agents() -> None:
+    """Enable GenAI/agent tracing so runs appear in the Foundry project's Tracing tab.
+
+    Azure mode only. Sets AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING and instruments the
+    agents SDK (AIAgentsInstrumentor — this SDK version's equivalent of
+    AIProjectInstrumentor). Requires App Insights to be connected to the project in the
+    portal (Agents → Traces → Connect) — see docs/foundry-hosted-agents.md.
+    """
+    import os
+    try:
+        from config.settings import get_settings, ModelBackend
+        s = get_settings()
+        if s.model_backend != ModelBackend.AZURE_FOUNDRY or not s.azure_ai_project_endpoint:
+            return
+        os.environ.setdefault("AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING", "true")
+        from azure.ai.agents.telemetry import AIAgentsInstrumentor
+        AIAgentsInstrumentor().instrument()
+        logger.info("Telemetry: Foundry GenAI agent instrumentation enabled")
+    except Exception as e:
+        logger.warning("Telemetry: Foundry agent instrumentation skipped: %s", e)
+
+
 def instrument_fastapi(app) -> None:
     """Auto-instrument FastAPI so every HTTP call is a tracked request in App Insights.
     No-op when telemetry is disabled or the package is missing."""

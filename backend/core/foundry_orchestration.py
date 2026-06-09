@@ -91,17 +91,14 @@ def _get_project_client():
             return None
 
         from azure.ai.projects import AIProjectClient
-        from azure.identity import DefaultAzureCredential
+        from backend.core.azure_credentials import get_service_credential
 
-        if s.azure_ai_api_key:
-            from azure.core.credentials import AzureKeyCredential
-            credential = AzureKeyCredential(s.azure_ai_api_key)
-        else:
-            credential = DefaultAzureCredential()
-
+        # The Agents data plane on *.services.ai.azure.com is Entra-token ONLY —
+        # API keys are not accepted. Always use a TokenCredential (DefaultAzureCredential,
+        # or a dedicated SPN via foundry_* settings). Excludes the IMDS probe locally.
         return AIProjectClient(
             endpoint=s.azure_ai_project_endpoint,
-            credential=credential,
+            credential=get_service_credential("foundry"),
         )
     except ImportError:
         logger.debug("azure-ai-projects not installed — Foundry orchestration disabled")
@@ -114,9 +111,9 @@ def _get_project_client():
 def _active_model() -> str:
     try:
         from config.settings import get_settings
-        return get_settings().azure_ai_model_deployment or "gpt-4o"
+        return get_settings().azure_ai_model_deployment or "gpt-4.1"
     except Exception:
-        return "gpt-4o"
+        return "gpt-4.1"
 
 
 class FoundrySession:

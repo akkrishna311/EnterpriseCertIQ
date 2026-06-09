@@ -55,8 +55,11 @@ async def lifespan(app: FastAPI):
     if kv.get("enabled"):
         logger.info("Key Vault: %d secret(s) loaded", kv.get("loaded", 0))
     setup_telemetry()
-    from backend.core.telemetry import instrument_fastapi, shutdown_telemetry
+    from backend.core.telemetry import (
+        instrument_fastapi, instrument_foundry_agents, shutdown_telemetry,
+    )
     instrument_fastapi(app)  # per-call request spans → App Insights
+    instrument_foundry_agents()  # GenAI/agent spans → Foundry project Tracing tab
     # Pre-register agent definitions in Foundry Agent Service (Azure mode only; no-op locally)
     from backend.core.foundry_orchestration import register_all_agents
     registered = await register_all_agents()
