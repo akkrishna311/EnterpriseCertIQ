@@ -1,7 +1,10 @@
 -r requirements.txt
 
 # Azure AI Foundry (cloud backend)
-azure-ai-projects==1.0.0
+# Path A (primary): azure-ai-projects v2.x — native Responses/Conversations, A2A,
+#   MCPTool, create_version, AIProjectInstrumentor (v2 absorbs azure-ai-agents).
+# The app auto-detects the installed generation: v2 → native, 1.x → mirror fallback.
+azure-ai-projects>=2.1.0
 azure-ai-inference==1.0.0b9
 azure-cosmos==4.9.0
 azure-identity==1.19.0

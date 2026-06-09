@@ -82,8 +82,35 @@ _AGENT_DEFINITIONS = [
 ]
 
 
+def _sdk_tier() -> str:
+    """Which azure-ai-projects generation is installed: 'v2' (>=2, native A2A/Responses/
+    create_version), 'v1' (1.x, agents/threads), or 'off' (not installed)."""
+    try:
+        import azure.ai.projects  # noqa: F401
+        import importlib.metadata as _m
+        return "v2" if int(_m.version("azure-ai-projects").split(".")[0]) >= 2 else "v1"
+    except Exception:
+        return "off"
+
+
+def foundry_mode() -> str:
+    """Active integration mode: 'native' (Path A, v2) → 'mirror' (Path B, v1) → 'off'.
+
+    Path A is preferred whenever the v2 SDK is installed and the project is configured;
+    it degrades to the v1 mirror, then to no-op, so the app never depends on it.
+    """
+    try:
+        from config.settings import get_settings, ModelBackend
+        s = get_settings()
+        if s.model_backend != ModelBackend.AZURE_FOUNDRY or not s.azure_ai_project_endpoint:
+            return "off"
+    except Exception:
+        return "off"
+    return {"v2": "native", "v1": "mirror"}.get(_sdk_tier(), "off")
+
+
 def _get_project_client():
-    """Return an AIProjectClient or None if not configured / not installed."""
+    """Return an AIProjectClient (v1 or v2 — same ctor) or None if not configured."""
     try:
         from config.settings import get_settings, ModelBackend
         s = get_settings()
@@ -135,6 +162,12 @@ class FoundrySession:
 
     async def __aenter__(self) -> "FoundrySession":
         import asyncio
+        # Thread/message mirroring is a v1-only API. In native (v2) mode, runs are
+        # represented via Conversations/Responses + AIProjectInstrumentor tracing, so we
+        # skip the v1 thread ops here rather than call APIs that don't exist on the v2 client.
+        if foundry_mode() != "mirror":
+            self._client = None
+            return self
         self._client = _get_project_client()
         if self._client is None:
             return self
@@ -247,39 +280,71 @@ class FoundrySession:
         return False  # do not suppress exceptions
 
 
+_ORCHESTRATOR_DEF = {
+    "name": "eciq-orchestrator",
+    "description": "EnterpriseCertIQ multi-agent learning orchestrator.",
+    "instructions": (
+        "You orchestrate the EnterpriseCertIQ pipeline: intake → curator → planner → "
+        "critic loop → engagement → assessment → manager insights, grounded in Foundry IQ, "
+        "Work IQ, and Fabric IQ."
+    ),
+    "model": None,
+}
+
+
 async def register_all_agents() -> list[dict]:
-    """
-    Pre-register all EnterpriseCertIQ agent definitions in Foundry.
-    Called once at startup when MODEL_BACKEND=azure_foundry.
-    Returns a list of registered agent summaries (empty list in local mode).
+    """Pre-register the EnterpriseCertIQ agents in Foundry (once at startup).
+
+    Path A (native, v2): `agents.create_version(PromptAgentDefinition(...))`.
+    Path B (mirror, v1): `agents.create_agent(...)` (create-or-reuse).
+    Returns [] in off/local mode or on auth failure (non-fatal).
     """
     import asyncio
+    mode = foundry_mode()
+    if mode == "off":
+        return []
     client = _get_project_client()
     if client is None:
         return []
 
     model = _active_model()
-    registered = []
+    defs = [_ORCHESTRATOR_DEF, *_AGENT_DEFINITIONS]
 
-    def _register_sync():
+    def _register_native():  # Path A — v2 create_version
+        from azure.ai.projects.models import PromptAgentDefinition
+        out = []
+        for d in defs:
+            definition = PromptAgentDefinition(model=model, instructions=d["instructions"])
+            v = client.agents.create_version(
+                agent_name=d["name"], definition=definition, description=d["description"],
+            )
+            out.append({"name": d["name"], "version": getattr(v, "version", None), "status": "versioned"})
+            logger.info("Foundry (native) agent versioned: %s", d["name"])
+        return out
+
+    def _register_mirror():  # Path B — v1 create_agent (create-or-reuse)
         existing = {a.name: a for a in client.agents.list_agents()}
-        for defn in _AGENT_DEFINITIONS:
-            name = defn["name"]
-            if name in existing:
-                registered.append({"name": name, "id": existing[name].id, "status": "existing"})
+        out = []
+        for d in defs:
+            if d["name"] in existing:
+                out.append({"name": d["name"], "id": existing[d["name"]].id, "status": "existing"})
                 continue
             agent = client.agents.create_agent(
-                model=model,
-                name=name,
-                description=defn["description"],
-                instructions=defn["instructions"],
+                model=model, name=d["name"],
+                description=d["description"], instructions=d["instructions"],
             )
-            registered.append({"name": name, "id": agent.id, "status": "created"})
-            logger.info("Registered Foundry agent: %s (%s)", name, agent.id)
+            out.append({"name": d["name"], "id": agent.id, "status": "created"})
+            logger.info("Foundry (mirror) agent created: %s (%s)", d["name"], agent.id)
+        return out
 
+    if mode == "native":
+        try:
+            return await asyncio.to_thread(_register_native)
+        except Exception as e:
+            logger.warning("Path A native registration failed, falling back to mirror: %s", e)
+            mode = "mirror"
     try:
-        await asyncio.to_thread(_register_sync)
+        return await asyncio.to_thread(_register_mirror)
     except Exception as e:
         logger.warning("register_all_agents failed (non-fatal): %s", e)
-
-    return registered
+        return []

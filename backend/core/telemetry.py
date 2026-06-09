@@ -161,9 +161,16 @@ def instrument_foundry_agents() -> None:
         if s.model_backend != ModelBackend.AZURE_FOUNDRY or not s.azure_ai_project_endpoint:
             return
         os.environ.setdefault("AZURE_EXPERIMENTAL_ENABLE_GENAI_TRACING", "true")
-        from azure.ai.agents.telemetry import AIAgentsInstrumentor
-        AIAgentsInstrumentor().instrument()
-        logger.info("Telemetry: Foundry GenAI agent instrumentation enabled")
+        # Path A (v2): AIProjectInstrumentor; Path B fallback (v1): AIAgentsInstrumentor.
+        try:
+            from azure.ai.projects.telemetry import AIProjectInstrumentor
+            AIProjectInstrumentor().instrument()
+            logger.info("Telemetry: Foundry GenAI instrumentation enabled (AIProjectInstrumentor / v2)")
+            return
+        except Exception:
+            from azure.ai.agents.telemetry import AIAgentsInstrumentor
+            AIAgentsInstrumentor().instrument()
+            logger.info("Telemetry: Foundry GenAI instrumentation enabled (AIAgentsInstrumentor / v1)")
     except Exception as e:
         logger.warning("Telemetry: Foundry agent instrumentation skipped: %s", e)
 

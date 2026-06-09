@@ -600,6 +600,7 @@ async def _build_manager_what_if_payload(team_id: str, learners: list[LearnerPro
 async def health():
     from backend.core import llm_cache
     from backend.middleware.pipeline import content_safety_mode
+    from backend.core.foundry_orchestration import foundry_mode
     return {
         "status": "ok",
         "backend": s.model_backend.value,
@@ -612,6 +613,7 @@ async def health():
         "content_safety": content_safety_mode(),
         "llm_cache": llm_cache.stats(),
         "audio": "azure_speech" if (s.enable_audio and s.speech_key and s.speech_region) else "transcript_only",
+        "foundry_agents": foundry_mode(),
         "key_vault": "configured" if s.azure_key_vault_url else "off",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

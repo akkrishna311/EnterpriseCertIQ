@@ -4,13 +4,23 @@ The authoritative runbook for the Foundry side of EnterpriseCertIQ, based on the
 docs (answers A–E). Covers what's **already implemented in code** and the **manual Azure
 steps** you run (they need `az login` + RBAC, which can't be done from the build sandbox).
 
-## TL;DR recommendation
+## Runtime tiers (Path A primary, Path B fallback)
 
-**Use the ephemeral agent pattern, not a hosted container.** Per the docs, a Hosted Agent
-container is **not required** to "use Foundry" — calling the Agent Service SDK from our
-existing app (agents + threads + tools + tracing + evals) satisfies the criteria, works in
-our region, and is far less effort. Hosted-container deployment is preview and region-limited
-(East US 2 / Sweden Central) — keep it as an optional stretch (recipe at the bottom).
+The app now **auto-selects** the Foundry integration tier at runtime — `foundry_mode()` in
+`backend/core/foundry_orchestration.py`, surfaced at `/health` as `foundry_agents`:
+
+| Tier | When | What runs |
+|---|---|---|
+| **`native` (Path A)** | `azure-ai-projects` **≥ 2.x** installed + project configured | `agents.create_version(PromptAgentDefinition)`, Responses/Conversations, `AIProjectInstrumentor` tracing |
+| **`mirror` (Path B)** | only `azure-ai-projects` **1.x** | `agents.create_agent` + thread/message mirroring, `AIAgentsInstrumentor` |
+| **`off`** | not Azure mode / no project endpoint | no-op (app unaffected) |
+
+**Path A is preferred and degrades gracefully** to mirror, then off — every Foundry call is
+guarded, so the pipeline never depends on it. To activate Path A: `pip install
+"azure-ai-projects>=2.1.0"` (already pinned in `requirements.azure.txt`) + `az login`.
+
+> Hosted-container deployment remains **optional** (preview; East US 2 / Sweden Central) — the
+> ephemeral pattern above satisfies the criteria. Recipe at the bottom.
 
 ## RBAC (do this first)
 
