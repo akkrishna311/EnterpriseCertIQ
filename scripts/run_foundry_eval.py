@@ -53,12 +53,18 @@ def _judge_model_config() -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", default=str(Path(__file__).resolve().parent.parent
-                                            / "backend/data/eval/eval_dataset.jsonl"))
+    ap.add_argument("--mode", choices=["quality", "agent"], default="quality",
+                    help="quality = groundedness/relevance/coherence/fluency; "
+                         "agent = intent resolution / tool-call accuracy / task adherence")
+    ap.add_argument("--dataset", default=None)
     ap.add_argument("--upload", action="store_true",
                     help="Publish results to the Foundry project portal (needs az login).")
     ap.add_argument("--output", default="eval_results.json")
     args = ap.parse_args()
+    root = Path(__file__).resolve().parent.parent
+    if args.dataset is None:
+        args.dataset = str(root / ("backend/data/eval/agent_eval_dataset.jsonl"
+                                   if args.mode == "agent" else "backend/data/eval/eval_dataset.jsonl"))
 
     s = get_settings()
     if not s.azure_ai_api_key:
@@ -68,20 +74,29 @@ def main() -> int:
         from azure.ai.evaluation import (
             evaluate, GroundednessEvaluator, RelevanceEvaluator,
             CoherenceEvaluator, FluencyEvaluator,
+            IntentResolutionEvaluator, ToolCallAccuracyEvaluator, TaskAdherenceEvaluator,
         )
     except ImportError:
         print("ERROR: pip install azure-ai-evaluation"); return 1
 
     model_config = _judge_model_config()
-    print(f"Judge model: {model_config['azure_deployment']} @ {model_config['azure_endpoint']}")
+    print(f"Mode: {args.mode} | Judge model: {model_config['azure_deployment']} @ {model_config['azure_endpoint']}")
     print(f"Dataset: {args.dataset}\n")
 
-    evaluators = {
-        "groundedness": GroundednessEvaluator(model_config),
-        "relevance": RelevanceEvaluator(model_config),
-        "coherence": CoherenceEvaluator(model_config),
-        "fluency": FluencyEvaluator(model_config),
-    }
+    if args.mode == "agent":
+        # Multi-agent quality: did agents resolve intent, call the right tools, stay on task?
+        evaluators = {
+            "intent_resolution": IntentResolutionEvaluator(model_config),
+            "tool_call_accuracy": ToolCallAccuracyEvaluator(model_config),
+            "task_adherence": TaskAdherenceEvaluator(model_config),
+        }
+    else:
+        evaluators = {
+            "groundedness": GroundednessEvaluator(model_config),
+            "relevance": RelevanceEvaluator(model_config),
+            "coherence": CoherenceEvaluator(model_config),
+            "fluency": FluencyEvaluator(model_config),
+        }
 
     kwargs = dict(
         data=args.dataset,

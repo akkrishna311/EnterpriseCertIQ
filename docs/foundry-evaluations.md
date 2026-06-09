@@ -62,6 +62,26 @@ python scripts/run_foundry_eval.py --upload
 relevance, coherence, fluency), per-row detail, and the dataset. Pair this with the **Tracing**
 tab (App Insights, see below) for the full observability story.
 
+## Agent-specific evaluators (multi-agent quality)
+
+In addition to the quality metrics above, run the **agent evaluators** — they measure how well
+a *multi-agent* system behaves, which is exactly our scenario:
+
+```bash
+python scripts/run_foundry_eval.py --mode agent            # local scores
+python scripts/run_foundry_eval.py --mode agent --upload   # publish to Foundry
+```
+
+| Evaluator | Measures | Inputs (dataset columns) |
+|---|---|---|
+| **Intent Resolution** | Did the agent understand + resolve the user's intent? | `query`, `response` |
+| **Tool Call Accuracy** | Right tools, right arguments? | `query`, `response`, `tool_calls`, `tool_definitions` |
+| **Task Adherence** | Did it stay on the assigned task? | `query`, `response`, `tool_definitions` |
+
+Dataset: `backend/data/eval/agent_eval_dataset.jsonl` (real agent responses + tool-call traces
+for curator/assessment/critic/engagement). Judge = gpt-4.1. Verified producing scores locally.
+These are the metrics that best show tool grounding + specialised-agent quality to judges.
+
 ## Optional: evaluate live agent output
 The committed dataset is representative grounded output. To evaluate *fresh* agent responses,
 regenerate the dataset from a workflow run (curator/assessment responses + their Foundry IQ

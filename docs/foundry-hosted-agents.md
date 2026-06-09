@@ -98,6 +98,64 @@ Only if you want the pipeline to run *as a managed Foundry endpoint*:
 5. Versions are **immutable**; **scale-to-zero** after 15 min idle (state persisted 30 days).
 6. Regions: **East US 2 / Sweden Central** only (preview).
 
+## Native v2.x path (when/if you upgrade the SDK)
+
+Confirmed from the docs (Q1–Q12). This is the "full Foundry-native" upgrade — **optional**;
+the 1.x register-and-mirror path above already satisfies the criteria.
+
+**SDK upgrade required** (`azure-ai-projects`):
+- **2.0.0+** for A2A + MCP tools; **2.1.0+** for Hosted Agents + `create_version`.
+- v2 **absorbs** `azure-ai-agents`/`azure-ai-inference`/`azure-ai-ml` into the unified project client.
+- Breaking: **Hubs→Projects**, **Threads/Runs→Conversations/Responses**, `create_agent()`→
+  `create_version()`, and tracing uses **`AIProjectInstrumentor`** (not our current
+  `AIAgentsInstrumentor`).
+
+**Tools — our local executors stay (Q1).** The Responses API supports **client-side function
+tools**: the response returns a `function_call` item → our code executes it → we append a
+`function_call_output` item and call `responses.create()` again. So we do **not** have to
+publicly host the MCP server to ground via Foundry agents.
+
+**Responses API shape (Q3):**
+```python
+client = project_client.get_openai_client()
+resp = client.responses.create(model="gpt-4.1", input=..., tools=[...],
+                               conversation=conversation_id, stream=False,
+                               extra_body={"agent_reference": {"name": a.name, "id": a.id,
+                                                               "type": "agent_reference"}})
+# loop: for item in resp.output: if function_call → execute locally → append
+#       function_call_output to the conversation → responses.create() again
+```
+- State = **Conversations + Responses** (not threads/runs). Streaming via `stream=True`.
+- **Trace correlation (Q6):** pass `agent_reference` in `extra_body`; call
+  `AIProjectInstrumentor().instrument()`.
+
+**MCP tool (Q7), when the server is publicly hosted:**
+```python
+MCPTool(server_label="enterprisecertiq", server_url="https://<host>/mcp",
+        require_approval="never")          # project_connection_id only if authed
+# schemas auto-discovered via tools/list; filter with allowed_tools=[...]
+```
+
+**A2A orchestration (Q4/Q5):**
+- `A2APreviewTool(name=..., description=..., project_connection_id=...)` — sub-agents are
+  referenced by a **Project Connection ID** pointing to the target agent's endpoint, so each
+  sub-agent must be **separately registered/hosted** first.
+- Works in **both** ephemeral and hosted patterns. (Legacy "Connected Agents" is gone.)
+
+**Hosted container (Q10–Q12), only if pursued:**
+- Handler: `azure-ai-agentserver-responses`, register a `@app.response_handler` taking
+  `(request, context, cancellation_signal)`, return `TextResponse` or `ResponseEventStream`;
+  serves on **8088** with `/readiness` auto-provided.
+- Deploy: `project.agents.create_version(agent_name, definition=HostedAgentDefinition(
+  image=..., cpu=..., memory=..., container_protocol_versions=[...], environment_variables={...}))`.
+- Secrets via **project connections** (`category RemoteTool`/`RemoteA2A`):
+  `${{connections.<name>.credentials.<field>}}` placeholders in `environment_variables` resolve
+  to env vars at sandbox start.
+
+**Continuous evaluation (Q8):** beyond batch `evaluate()`, Foundry supports **evaluation rules**
+(Python SDK) that auto-run evaluators when an agent response completes — wire after the upgrade
+for live agent-quality dashboards.
+
 ## Honest status for the submission
 
 - "Uses Microsoft Foundry": ✅ via the Agent Service SDK (agents + threads) + Azure OpenAI
