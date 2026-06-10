@@ -6,6 +6,39 @@ Detailed, copy-paste runbook for Step 5, grounded in the current Microsoft docs:
 
 Assumes Step 1–4 are done (workspace + Lakehouse `enterprisecertiq` with the 11 Delta tables).
 
+## ⚠️ Correct integration path (read first)
+
+Two facts from the Foundry/Fabric docs decide the architecture:
+1. **Reading OneLake tables via the SQL endpoint is NOT "using Fabric IQ"** — Fabric IQ means
+   hitting the semantic layers (ontology/NL2Ontology, data agent, or Power BI semantic model).
+   So the `FABRIC_SQL_*` path in `fabric_iq.py` is a **Lakehouse data fallback, not a Fabric IQ
+   integration** — don't claim Fabric IQ for it.
+2. **Fabric IQ is user-delegated (OBO) auth ONLY — service principals are explicitly NOT
+   supported.** Audience `https://analysis.windows.net/powerbi/api`; ontology scopes
+   `Item.Execute.All` + `Item.Read.All`; data-agent scope `DataAgent.Execute.All`. Therefore a
+   headless backend SPN (`get_service_credential("fabric")`) **cannot** call Fabric IQ.
+
+**=> The integration path is a Foundry agent with the Fabric IQ tool, running OBO the signed-in
+user**, not a backend SPN call:
+
+1. **Foundry → Management center → Connected resources → + Connection → Microsoft Fabric** →
+   enter the **workspace_id + artifact_id** (GUIDs from the Ontology's URL in the Fabric portal).
+2. **Foundry → Build → <agent> → Tools → + → Fabric IQ (OneLake Catalog)** → select that
+   connection / your ontology.
+3. **Test in the agent playground** (you're signed in → OBO works): e.g. *"For learner L-1004
+   targeting AZ-204, which high-leverage domain is weakest?"* → answered via NL2Ontology. That
+   live answer is the defensible **"uses Fabric IQ"** proof.
+
+For the hackathon, demoing this Foundry agent is the simplest path that fully counts. Making the
+**web app** call Fabric IQ requires forwarding the **signed-in user's delegated token** (OBO) to
+the agent / ontology MCP endpoint — not the SPN. Direct ontology MCP endpoint (if Trial allows):
+`https://{host}/v1/mcp/dataPlane/workspaces/{workspaceId}/items/{itemId}/ontologyEndpoint`.
+
+Open: whether **Trial capacity** supports the Fabric IQ tool / ontology query (may need paid F2+).
+
+---
+
+
 ## 0. Enable the gating tenant settings (admin, once)
 Admin portal → **Tenant settings**:
 - **Fabric data agent** / **Copilot → Standalone Copilot experience** = On
