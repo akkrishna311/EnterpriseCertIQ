@@ -1035,7 +1035,7 @@ async def get_forecast(learner_id: str, cert_id: str):
     if not evidence:
         evidence = learner.get("prior_assessment_evidence", {}) if learner else {}
 
-    return await compute_readiness_forecast.fn(ForecastInput(
+    forecast = await compute_readiness_forecast.fn(ForecastInput(
         learner_id=learner_id,
         cert_id=cert_id,
         plan_id="latest",
@@ -1043,6 +1043,23 @@ async def get_forecast(learner_id: str, cert_id: str):
         observed_exam_score=latest_assessment.get("estimated_exam_score") if latest_assessment else None,
         observed_score_pct=latest_assessment.get("score_pct") if latest_assessment else None,
     ))
+    # Calibrated P(pass) from the trained readiness model (the headline-metric model;
+    # LOO AUC ≈ 0.80). Abstains (INSUFFICIENT) if the learner's signals are missing.
+    try:
+        from backend.evals.readiness_model import predict_pass_probability
+        sig = (learner or {}).get("work_iq_signals", {}) or {}
+        practice = (latest_assessment or {}).get("score_pct")
+        if practice is None and isinstance(forecast, dict) and forecast.get("estimated_exam_score"):
+            practice = forecast["estimated_exam_score"] / 10.0   # 0-1000 → 0-100
+        if isinstance(forecast, dict):
+            forecast["calibrated"] = predict_pass_probability(
+                practice_score=practice,
+                hours_studied=sig.get("available_study_hours_per_week") or sig.get("focus_hours_per_week"),
+                meeting_hours_pw=sig.get("meeting_hours_per_week"),
+            )
+    except Exception:
+        pass
+    return forecast
 
 
 @app.get("/api/reports/learner/{learner_id}/{cert_id}.pdf")

@@ -3,6 +3,12 @@
 **Multi-agent enterprise certification learning system**
 *Microsoft Agents League 2026 · Reasoning Agents Track*
 
+**Highlights:** 9 agents on Microsoft Foundry · all 3 IQ layers (Foundry IQ = **real Azure AI
+Search**, Fabric IQ ontology + live tool, Work IQ signals) · **calibrated P(pass), LOO AUC ≈ 0.80**
+with INSUFFICIENT abstention · adversarial critic→replan loop · NotebookLM-style **audio podcast**
+coaching · what-if simulator · HITL exam gate · App Insights tracing · azure-ai-evaluation agent
+scorers · Azure Content Safety · **85 tests**.
+
 > **All data is synthetic.** No real employee names, email addresses, or organisational data.
 > Identifiers follow the pattern `L-1001`, `EMP-001`, `TEAM-A`.
 
@@ -10,7 +16,7 @@
 
 ## What it does
 
-EnterpriseCertIQ is a 6-agent pipeline that turns a certification goal into a grounded, work-aware study plan — with visible reasoning, calibrated readiness forecasting, a human-in-the-loop approval checkpoint, and a manager surface that turns weak signals into concrete follow-up. The plan stays in `draft` and is only marked published once a human approves it. Engagement and Manager Insights run on the draft to give the reviewer advisory previews at approval time.
+EnterpriseCertIQ is a 9-agent system that turns a certification goal into a grounded, work-aware study plan — with visible reasoning, calibrated readiness forecasting, a human-in-the-loop approval checkpoint, and a manager surface that turns weak signals into concrete follow-up. The plan stays in `draft` and is only marked published once a human approves it. Engagement and Manager Insights run on the draft to give the reviewer advisory previews at approval time.
 
 | Agent | Role |
 |---|---|
