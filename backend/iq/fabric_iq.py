@@ -180,6 +180,39 @@ class FabricIQClient:
             logger.error("Fabric IQ Azure query failed, falling back to local ontology: %s", e)
             return None
 
+    # ── SKU-free path: Lakehouse SQL analytics endpoint (works on the Fabric Trial) ──
+    def _sql_enabled(self) -> bool:
+        return bool(self.s.fabric_sql_endpoint and self.s.fabric_sql_database)
+
+    def _query_fabric_sql(self, sql: str, params: tuple = ()) -> Optional[list[dict]]:
+        """Query the Lakehouse SQL analytics endpoint (T-SQL over the OneLake Delta tables)
+        with an Entra token — no data agent / paid F2 required. Returns rows as dicts, or
+        None on any failure (→ caller falls back to local). Needs pyodbc + ODBC Driver 18.
+        """
+        if not self._sql_enabled():
+            return None
+        try:
+            import struct
+            import pyodbc
+            from backend.core.azure_credentials import get_service_credential
+            token = get_service_credential("fabric").get_token(
+                "https://database.windows.net/.default").token
+            tok = token.encode("utf-16-le")
+            token_struct = struct.pack(f"<I{len(tok)}s", len(tok), tok)
+            conn_str = (
+                "Driver={ODBC Driver 18 for SQL Server};"
+                f"Server={self.s.fabric_sql_endpoint};Database={self.s.fabric_sql_database};"
+                "Encrypt=yes;TrustServerCertificate=no;"
+            )
+            with pyodbc.connect(conn_str, attrs_before={1256: token_struct}) as conn:  # 1256 = SQL_COPT_SS_ACCESS_TOKEN
+                cur = conn.cursor()
+                cur.execute(sql, params)
+                cols = [c[0] for c in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+        except Exception as e:
+            logger.error("Fabric IQ SQL endpoint query failed, falling back to local: %s", e)
+            return None
+
     @staticmethod
     def _coerce_thresholds(answer: Optional[dict]) -> Optional[list[dict]]:
         """Map a Fabric IQ response into our threshold shape; return None if it doesn't
@@ -266,6 +299,15 @@ class FabricIQClient:
         routing this one method grounds the whole readiness chain in Fabric IQ.
         """
         self._load()
+        # 1) SKU-free: Lakehouse SQL analytics endpoint (Trial-friendly).
+        if self._sql_enabled():
+            rows = self._query_fabric_sql(
+                "SELECT domain_id, name, weight_pct, minimum_mastery "
+                "FROM cert_domains WHERE cert_id = ?", (cert_id,))
+            mapped = self._coerce_thresholds({"domains": rows} if rows else None)
+            if mapped:
+                return mapped
+        # 2) Fabric data agent (needs paid F2+ capacity).
         if self._azure_enabled():
             mapped = self._coerce_thresholds(self._query_fabric(
                 intent="domain_thresholds",
@@ -274,6 +316,7 @@ class FabricIQClient:
             ))
             if mapped:
                 return mapped
+        # 3) Local ontology (default / fallback).
         cert = self._certs.get(cert_id, {})
         pass_ratio = cert.get("passing_score", 700) / 1000
         thresholds = []

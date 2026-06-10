@@ -14,7 +14,31 @@ Without these, "+ New item → Fabric data agent" won't work.
 
 ---
 
-## Part A — Fabric Data Agent (do this first; the fast win)
+## No paid SKU? Use the Lakehouse SQL endpoint instead of the data agent
+
+The **Fabric data agent needs a paid F2+ capacity** — the **Trial doesn't qualify**. You don't
+need it: the app's semantic methods need the *data*, not an LLM agent, and every Lakehouse has a
+**SQL analytics endpoint** that works on the Trial. The backend already supports this path
+(`FabricIQClient._query_fabric_sql`, tried *before* the data agent):
+
+1. Lakehouse → **Settings → SQL analytics endpoint** → copy the **server** (e.g.
+   `<id>.datawarehouse.fabric.microsoft.com`) and note the **database** = lakehouse name.
+2. Set env:
+   ```
+   FABRIC_SQL_ENDPOINT=<id>.datawarehouse.fabric.microsoft.com
+   FABRIC_SQL_DATABASE=enterprisecertiq
+   FABRIC_TENANT_ID/CLIENT_ID/CLIENT_SECRET=...   # SPN with Viewer on the workspace/SQL endpoint
+   ```
+   (`pip install pyodbc` + the system **ODBC Driver 18 for SQL Server**.)
+3. `get_domain_thresholds` now runs `SELECT … FROM cert_domains WHERE cert_id = ?` against live
+   OneLake data — genuine Fabric IQ grounding, on the Trial SKU. `/health` shows
+   `fabric_iq: azure-sql`. Falls back to local on any failure.
+
+Keep your **Ontology** (Part B) — it's the semantic layer and powers NL2Ontology later, either
+on a paid F2+ capacity or via the Foundry `fabric_iq_preview` tool (Foundry's agent runtime,
+which may sidestep the Fabric data-agent SKU). The data agent below is optional.
+
+## Part A — Fabric Data Agent (optional; needs paid F2+)
 
 ### A1. Create it
 Workspace → **+ New item** → search **Fabric data agent** → name it `enterprisecertiq-agent`.

@@ -608,7 +608,8 @@ async def health():
         "iq_layers": {
             "foundry_iq": "azure" if s.foundry_iq_endpoint != "local" else "local",
             "work_iq": "synthetic",
-            "fabric_iq": "azure" if s.fabric_iq_endpoint != "local" else "local",
+            "fabric_iq": ("azure-sql" if (s.fabric_sql_endpoint and s.fabric_sql_database)
+                          else "azure-agent" if s.fabric_iq_endpoint != "local" else "local"),
         },
         "content_safety": content_safety_mode(),
         "llm_cache": llm_cache.stats(),

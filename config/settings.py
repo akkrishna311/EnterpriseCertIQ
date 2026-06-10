@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     #        Not provisioned in this repo yet — see Phase 5 of the migration doc.
     fabric_iq_endpoint: str = "local"
     fabric_iq_workspace: str = ""  # Fabric workspace / lakehouse name (Azure mode)
+    # SKU-free path: the Lakehouse SQL analytics endpoint (works on the Fabric Trial —
+    # no data-agent / paid F2 needed). From Lakehouse → Settings → SQL analytics endpoint.
+    # fabric_sql_endpoint = the TDS server (e.g. <id>.datawarehouse.fabric.microsoft.com),
+    # fabric_sql_database = the lakehouse name.
+    fabric_sql_endpoint: str = ""
+    fabric_sql_database: str = ""
     # Fabric can live in a DIFFERENT Azure account/tenant than Foundry. Give it its
     # own service principal (Entra app) — Fabric is Entra-auth, not key-auth. When
     # all three are set, the Fabric IQ client uses a ClientSecretCredential scoped to
