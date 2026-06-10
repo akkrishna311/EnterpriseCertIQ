@@ -43,6 +43,23 @@ Agent Service exchanges it for the Fabric audience (`https://analysis.windows.ne
 **Service principals are not allowed** — user-delegated only. For the hackathon, the playground
 demo (step 3) already counts as "uses Fabric IQ"; the web-app OBO is polish.
 
+**App integration — IMPLEMENTED (backend):** `POST /api/fabric-iq/ask` (in `backend/main.py`)
+forwards the caller's `Authorization: Bearer <user_token>` to the Foundry agent via
+`backend/core/fabric_iq_agent.py` → `responses.create(extra_body={agent_reference})` (OBO; no SPN).
+Setup to go live:
+1. `pip install -r requirements.azure.txt`  (azure-ai-projects **>=2.1.0**, needed for `get_openai_client`/`responses`)
+2. `FABRIC_IQ_AGENT_NAME=<your Foundry agent with the Fabric IQ tool>`
+3. Test without a frontend yet — mint a user token from the CLI and curl:
+   ```bash
+   TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
+   curl -s localhost:8000/api/fabric-iq/ask -H "Authorization: Bearer $TOKEN" \
+        -H 'content-type: application/json' \
+        -d '{"question":"For learner L-1004 targeting AZ-204, which high-leverage domain is weakest?"}'
+   ```
+**Still TODO (frontend):** add MSAL sign-in (`@azure/msal-browser`) so the browser obtains the
+user's token (scope for the Foundry/AI audience) and sends it as the `Bearer` header to
+`/api/fabric-iq/ask`. Until then, use the CLI-token curl above to validate end-to-end.
+
 ---
 
 

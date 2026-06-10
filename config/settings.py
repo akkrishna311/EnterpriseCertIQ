@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     # fabric_sql_database = the lakehouse name.
     fabric_sql_endpoint: str = ""
     fabric_sql_database: str = ""
+    # The Foundry agent (created in the portal) that has the Fabric IQ (OneLake Catalog)
+    # tool attached to your Ontology. The app invokes THIS agent On-Behalf-Of the signed-in
+    # user (Fabric IQ rejects service principals). Needs azure-ai-projects>=2.1.0.
+    fabric_iq_agent_name: str = ""
     # Fabric can live in a DIFFERENT Azure account/tenant than Foundry. Give it its
     # own service principal (Entra app) — Fabric is Entra-auth, not key-auth. When
     # all three are set, the Fabric IQ client uses a ClientSecretCredential scoped to

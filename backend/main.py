@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional
 
 import structlog
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
@@ -595,6 +595,37 @@ async def _build_manager_what_if_payload(team_id: str, learners: list[LearnerPro
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
+
+class FabricIQAskRequest(BaseModel):
+    question: str
+
+
+@app.post("/api/fabric-iq/ask")
+async def fabric_iq_ask(body: FabricIQAskRequest, authorization: str = Header(default="")):
+    """Query the Foundry agent that has the Fabric IQ tool, On-Behalf-Of the signed-in user.
+
+    The frontend must send the user's Entra bearer token (Fabric IQ rejects service principals).
+    """
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail=("Fabric IQ requires the signed-in user's Entra token "
+                    "(Authorization: Bearer <token>). Service principals are not supported."),
+        )
+    token = authorization.split(" ", 1)[1].strip()
+    question = (body.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Provide a 'question'.")
+    import asyncio
+    from backend.core.fabric_iq_agent import ask_fabric_iq
+    try:
+        answer = await asyncio.to_thread(ask_fabric_iq, question, token)
+    except RuntimeError as e:               # missing config / SDK prereq
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:                   # agent / Fabric call failure
+        raise HTTPException(status_code=502, detail=f"Fabric IQ agent call failed: {e}")
+    return {"answer": answer, "agent": get_settings().fabric_iq_agent_name}
+
 
 @app.get("/health")
 async def health():
