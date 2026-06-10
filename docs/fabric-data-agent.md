@@ -18,23 +18,30 @@ Two facts from the Foundry/Fabric docs decide the architecture:
    `Item.Execute.All` + `Item.Read.All`; data-agent scope `DataAgent.Execute.All`. Therefore a
    headless backend SPN (`get_service_credential("fabric")`) **cannot** call Fabric IQ.
 
-**=> The integration path is a Foundry agent with the Fabric IQ tool, running OBO the signed-in
-user**, not a backend SPN call:
+**=> The integration path is a Foundry agent with the Fabric IQ (OneLake Catalog) tool pointed
+at your Ontology, running OBO the signed-in user** — not a backend SPN call.
 
-1. **Foundry → Management center → Connected resources → + Connection → Microsoft Fabric** →
-   enter the **workspace_id + artifact_id** (GUIDs from the Ontology's URL in the Fabric portal).
-2. **Foundry → Build → <agent> → Tools → + → Fabric IQ (OneLake Catalog)** → select that
-   connection / your ontology.
+**Prereqs — a BYO Entra app** (the connection authenticates with this; OBO uses it at runtime):
+- Register (or reuse) an Entra app. Grant **delegated** Fabric permissions
+  `https://analysis.windows.net/powerbi/api/Item.Execute.All` + `Item.Read.All`, grant admin
+  consent. Note its **client ID + client secret**.
+- From the Ontology's URL in the Fabric portal, note its **workspace_id** and **artifact_id** (GUIDs).
+
+**Steps:**
+1. **Foundry → Management center → Connected resources → + Connection → Microsoft Fabric (Fabric
+   IQ)** → enter **client ID, client secret, workspace_id, artifact_id**.
+2. **Foundry → Build → <agent> → Tools → + → Fabric IQ (OneLake Catalog)** → pick that connection
+   → select your **Ontology** item (this enables the NL2Ontology layer, not raw-table grounding).
 3. **Test in the agent playground** (you're signed in → OBO works): e.g. *"For learner L-1004
    targeting AZ-204, which high-leverage domain is weakest?"* → answered via NL2Ontology. That
-   live answer is the defensible **"uses Fabric IQ"** proof.
+   live answer is the defensible **"uses Fabric IQ"** proof — and it answers the open Trial/SKU
+   question: if it returns, your Trial runs it; if it errors on license/SKU, spin a short-lived F2.
 
-For the hackathon, demoing this Foundry agent is the simplest path that fully counts. Making the
-**web app** call Fabric IQ requires forwarding the **signed-in user's delegated token** (OBO) to
-the agent / ontology MCP endpoint — not the SPN. Direct ontology MCP endpoint (if Trial allows):
-`https://{host}/v1/mcp/dataPlane/workspaces/{workspaceId}/items/{itemId}/ontologyEndpoint`.
-
-Open: whether **Trial capacity** supports the Fabric IQ tool / ontology query (may need paid F2+).
+**Optional — web app calls Fabric IQ (OBO):** the browser signs the user in with Entra (MSAL),
+the backend forwards `Authorization: Bearer {user_token}` when calling the agent endpoint, and the
+Agent Service exchanges it for the Fabric audience (`https://analysis.windows.net/powerbi/api`).
+**Service principals are not allowed** — user-delegated only. For the hackathon, the playground
+demo (step 3) already counts as "uses Fabric IQ"; the web-app OBO is polish.
 
 ---
 
