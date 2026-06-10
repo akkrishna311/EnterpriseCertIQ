@@ -137,6 +137,74 @@ class FabricIQClient:
             logger.warning("Fabric IQ: could not read %s: %s", path, e)
             return default
 
+    # ── Azure (Microsoft Fabric IQ) connection ──────────────────────────
+    def _azure_enabled(self) -> bool:
+        """True when FABRIC_IQ_ENDPOINT targets a real Fabric workspace (not 'local')."""
+        ep = (self.s.fabric_iq_endpoint or "").strip()
+        return bool(ep) and ep.lower() != "local"
+
+    def _fabric_token(self) -> str:
+        """Entra token for the Fabric data plane. Uses get_service_credential('fabric'),
+        so Fabric may live in a different account/tenant than Foundry (FABRIC_TENANT_ID/
+        CLIENT_ID/CLIENT_SECRET) — see docs/multi-account-azure.md."""
+        from backend.core.azure_credentials import get_service_credential
+        cred = get_service_credential("fabric")
+        return cred.get_token("https://api.fabric.microsoft.com/.default").token
+
+    def _query_fabric(self, intent: str, params: dict, question: str) -> Optional[dict]:
+        """Send a semantic query to the Fabric IQ data agent (NL2Ontology) and return its
+        JSON answer, or None on any failure (→ caller falls back to the local ontology).
+
+        Connection-ready: no-ops to None until FABRIC_IQ_ENDPOINT points at a real Fabric
+        workspace. Mirrors FoundryIQClient._search_azure — a branch + a real authenticated
+        call + a graceful local fallback. The request path/payload follow the Fabric data
+        agent (preview); finalize field names against your live workspace.
+        """
+        if not self._azure_enabled():
+            return None
+        try:
+            import httpx
+            endpoint = self.s.fabric_iq_endpoint.rstrip("/")
+            workspace = self.s.fabric_iq_workspace
+            token = self._fabric_token()
+            with httpx.Client(timeout=20) as c:
+                r = c.post(
+                    f"{endpoint}/v1/workspaces/{workspace}/aiservices/dataagent/query",
+                    json={"intent": intent, "parameters": params, "question": question},
+                    headers={"Authorization": f"Bearer {token}",
+                             "Content-Type": "application/json"},
+                )
+                r.raise_for_status()
+                return r.json()
+        except Exception as e:
+            logger.error("Fabric IQ Azure query failed, falling back to local ontology: %s", e)
+            return None
+
+    @staticmethod
+    def _coerce_thresholds(answer: Optional[dict]) -> Optional[list[dict]]:
+        """Map a Fabric IQ response into our threshold shape; return None if it doesn't
+        conform so the caller falls back to the local ontology (never returns a wrong shape)."""
+        if not isinstance(answer, dict):
+            return None
+        rows = answer.get("domains") or answer.get("thresholds") or answer.get("value")
+        if not isinstance(rows, list) or not rows:
+            return None
+        out: list[dict] = []
+        for d in rows:
+            if not isinstance(d, dict) or "weight_pct" not in d:
+                return None  # shape mismatch → local fallback
+            weight = float(d.get("weight_pct", 0))
+            out.append({
+                "domain_id": d.get("domain_id", ""),
+                "name": d.get("name", ""),
+                "weight_pct": weight,
+                "leverage": round(weight / 100, 3),
+                "minimum_mastery": float(d.get("minimum_mastery", _DEFAULT_PASS_RATIO)),
+                "priority": d.get("priority") or _priority_for_weight(weight),
+                "services": d.get("services", []),
+            })
+        return out
+
     # ── Semantic queries ────────────────────────────────────────────────
 
     def describe_ontology(self) -> dict:
@@ -190,8 +258,22 @@ class FabricIQClient:
         return _ADVANCEMENT.get(cert_id, "")
 
     def get_domain_thresholds(self, cert_id: str) -> list[dict]:
-        """Per-domain semantic thresholds: weight, leverage, minimum mastery, priority."""
+        """Per-domain semantic thresholds: weight, leverage, minimum mastery, priority.
+
+        Azure (Fabric IQ) path first when FABRIC_IQ_ENDPOINT is set; falls back to the
+        local ontology on any failure or shape mismatch. `_evidence_domains`,
+        `get_readiness_semantics`, and `get_team_skill_gap_summary` all build on this, so
+        routing this one method grounds the whole readiness chain in Fabric IQ.
+        """
         self._load()
+        if self._azure_enabled():
+            mapped = self._coerce_thresholds(self._query_fabric(
+                intent="domain_thresholds",
+                params={"cert_id": cert_id},
+                question=f"List the weighted skill domains and minimum mastery for certification {cert_id}.",
+            ))
+            if mapped:
+                return mapped
         cert = self._certs.get(cert_id, {})
         pass_ratio = cert.get("passing_score", 700) / 1000
         thresholds = []
