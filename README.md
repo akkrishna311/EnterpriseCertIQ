@@ -7,7 +7,7 @@
 Search**, Fabric IQ ontology + live tool, Work IQ signals) · **calibrated P(pass), LOO AUC ≈ 0.80**
 with INSUFFICIENT abstention · adversarial critic→replan loop · NotebookLM-style **audio podcast**
 coaching · what-if simulator · HITL exam gate · App Insights tracing · azure-ai-evaluation agent
-scorers · Azure Content Safety · **85 tests**.
+scorers · Azure Content Safety + **adversarial red-team 16/16 held (0% ASR)** · **88 tests**.
 
 > **All data is synthetic.** No real employee names, email addresses, or organisational data.
 > Identifiers follow the pattern `L-1001`, `EMP-001`, `TEAM-A`.

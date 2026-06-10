@@ -616,6 +616,11 @@ async def fabric_iq_ask(body: FabricIQAskRequest, authorization: str = Header(de
     question = (body.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Provide a 'question'.")
+    from backend.middleware.red_team import screen_input
+    verdict = screen_input(question)
+    if not verdict.allowed:
+        raise HTTPException(status_code=400,
+                            detail=f"Request blocked by input guard ({verdict.category}).")
     import asyncio
     from backend.core.fabric_iq_agent import ask_fabric_iq
     try:
