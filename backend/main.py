@@ -619,12 +619,17 @@ async def fabric_iq_ask(body: FabricIQAskRequest, authorization: str = Header(de
     import asyncio
     from backend.core.fabric_iq_agent import ask_fabric_iq
     try:
-        answer = await asyncio.to_thread(ask_fabric_iq, question, token)
+        result = await asyncio.to_thread(ask_fabric_iq, question, token)
     except RuntimeError as e:               # missing config / SDK prereq
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:                   # agent / Fabric call failure
         raise HTTPException(status_code=502, detail=f"Fabric IQ agent call failed: {e}")
-    return {"answer": answer, "agent": get_settings().fabric_iq_agent_name}
+    # Managed-OAuth first use → surface the consent link for the UI to open (HTTP 200).
+    if result.get("consent_required"):
+        return {"consent_required": True, "consent_link": result.get("consent_link"),
+                "agent": get_settings().fabric_iq_agent_name}
+    return {"answer": result.get("answer"), "citations": result.get("citations", []),
+            "agent": get_settings().fabric_iq_agent_name}
 
 
 @app.get("/health")
@@ -641,6 +646,7 @@ async def health():
             "work_iq": "synthetic",
             "fabric_iq": ("azure-sql" if (s.fabric_sql_endpoint and s.fabric_sql_database)
                           else "azure-agent" if s.fabric_iq_endpoint != "local" else "local"),
+            "fabric_iq_ask": "ready" if bool(s.azure_ai_project_endpoint and s.fabric_iq_agent_name) else "unavailable",
         },
         "content_safety": content_safety_mode(),
         "llm_cache": llm_cache.stats(),
