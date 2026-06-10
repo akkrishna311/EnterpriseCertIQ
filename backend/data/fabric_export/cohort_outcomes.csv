@@ -1,0 +1,13 @@
+learner_id,role,cert_id,practice_score_avg,hours_studied,meeting_hours_pw,exam_outcome
+L-1001,Cloud Engineer,AZ-204,67,18,20,Fail
+L-1002,DevOps Engineer,AZ-400,82,24,15,Pass
+L-1003,Data Engineer,DP-203,74,20,18,Pass
+L-1009,Cloud Engineer,AZ-204,78,22,16,Pass
+L-1010,Cloud Engineer,AZ-204,61,14,28,Fail
+L-1011,DevOps Engineer,AZ-400,76,20,22,Pass
+L-1012,Data Engineer,DP-203,55,12,30,Fail
+L-1016,AI Engineer,AI-102,80,23,16,Pass
+L-1017,AI Engineer,AI-102,63,15,26,Fail
+L-1018,Data Scientist,DP-100,77,21,17,Pass
+L-1019,Data Scientist,DP-100,58,13,29,Fail
+L-1020,AI Practitioner,AI-900,85,11,20,Pass

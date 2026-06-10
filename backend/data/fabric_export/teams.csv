@@ -1,0 +1,4 @@
+team_id,team_name,manager_id,quarter_goal
+TEAM-A,Platform Engineering,MGR-001,All members hold at least one Azure certification by Q3 2026
+TEAM-B,Data & Architecture,MGR-002,Upskill data engineers on Azure Data platform; architect to achieve AZ-305
+TEAM-C,Applied AI,MGR-003,"Build applied-AI certification depth: AI Engineer, Data Scientist, and AI fundamentals"

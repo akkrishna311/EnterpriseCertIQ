@@ -1,0 +1,41 @@
+cert_id,domain_id,name,weight_pct,minimum_mastery
+AZ-204,D1,Develop Azure compute solutions,25,0.7
+AZ-204,D2,Develop for Azure storage,15,0.7
+AZ-204,D3,Implement Azure security,20,0.7
+AZ-204,D4,"Monitor, troubleshoot, and optimize Azure solutions",15,0.7
+AZ-204,D5,Connect to and consume Azure services and third-party services,25,0.7
+AZ-400,D1,Configure processes and communications,10,0.7
+AZ-400,D2,Design and implement source control,15,0.7
+AZ-400,D3,Design and implement build and release pipelines,40,0.7
+AZ-400,D4,Develop a security and compliance plan,20,0.7
+AZ-400,D5,Implement an instrumentation strategy,15,0.7
+DP-203,D1,Design and implement data storage,40,0.7
+DP-203,D2,Design and develop data processing,25,0.7
+DP-203,D3,Design and implement data security,20,0.7
+DP-203,D4,Monitor and optimize data storage and data processing,15,0.7
+AZ-305,D1,"Design identity, governance, and monitoring solutions",25,0.7
+AZ-305,D2,Design data storage solutions,25,0.7
+AZ-305,D3,Design business continuity solutions,15,0.7
+AZ-305,D4,Design infrastructure solutions,35,0.7
+AI-102,D1,Plan and manage an Azure AI solution,20,0.7
+AI-102,D2,Implement generative AI solutions,15,0.7
+AI-102,D3,Implement computer vision solutions,20,0.7
+AI-102,D4,Implement natural language processing solutions,20,0.7
+AI-102,D5,Implement knowledge mining and document intelligence,25,0.7
+DP-100,D1,Design and prepare a machine learning solution,25,0.7
+DP-100,D2,Explore data and train models,35,0.7
+DP-100,D3,Prepare a model for deployment,20,0.7
+DP-100,D4,Deploy and retrain a model,20,0.7
+AI-900,D1,Describe AI workloads and considerations,20,0.7
+AI-900,D2,Describe fundamental principles of machine learning,25,0.7
+AI-900,D3,Describe features of computer vision workloads,20,0.7
+AI-900,D4,Describe features of natural language processing workloads,20,0.7
+AI-900,D5,Describe features of generative AI workloads,15,0.7
+SC-100,D1,Design a Zero Trust strategy and architecture,30,0.7
+SC-100,D2,Evaluate GRC strategies and security operations,25,0.7
+SC-100,D3,Design security for infrastructure,25,0.7
+SC-100,D4,Design a strategy for data and applications,20,0.7
+MS-102,D1,Deploy and manage a Microsoft 365 tenant,25,0.7
+MS-102,D2,Implement and manage identity and access,25,0.7
+MS-102,D3,Manage security and threats using Microsoft 365 Defender,25,0.7
+MS-102,D4,Manage compliance using Microsoft Purview,25,0.7

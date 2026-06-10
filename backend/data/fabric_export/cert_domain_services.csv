@@ -1,0 +1,159 @@
+cert_id,domain_id,service
+AZ-204,D1,Azure Functions
+AZ-204,D1,Azure App Service
+AZ-204,D1,Azure Container Instances
+AZ-204,D1,Azure Container Apps
+AZ-204,D2,Azure Blob Storage
+AZ-204,D2,Azure Cosmos DB
+AZ-204,D2,Azure Table Storage
+AZ-204,D2,Azure Queue Storage
+AZ-204,D3,Azure Key Vault
+AZ-204,D3,Azure Active Directory
+AZ-204,D3,Managed Identity
+AZ-204,D3,RBAC
+AZ-204,D4,Azure Monitor
+AZ-204,D4,Application Insights
+AZ-204,D4,Log Analytics
+AZ-204,D4,Azure Cache for Redis
+AZ-204,D5,Azure API Management
+AZ-204,D5,Azure Event Grid
+AZ-204,D5,Azure Service Bus
+AZ-204,D5,Azure Event Hub
+AZ-400,D1,Azure Boards
+AZ-400,D1,GitHub Issues
+AZ-400,D1,Agile tools
+AZ-400,D2,Azure Repos
+AZ-400,D2,GitHub
+AZ-400,D2,Git branching strategies
+AZ-400,D3,Azure Pipelines
+AZ-400,D3,GitHub Actions
+AZ-400,D3,Azure Artifacts
+AZ-400,D3,Deployment strategies
+AZ-400,D4,Azure Security Center
+AZ-400,D4,Dependency scanning
+AZ-400,D4,Secret management
+AZ-400,D4,SAST
+AZ-400,D5,Azure Monitor
+AZ-400,D5,Application Insights
+AZ-400,D5,Log Analytics
+AZ-400,D5,Alerting
+DP-203,D1,Azure Data Lake Gen2
+DP-203,D1,Azure Synapse Analytics
+DP-203,D1,Azure Blob Storage
+DP-203,D1,Azure SQL Database
+DP-203,D2,Azure Databricks
+DP-203,D2,Azure Data Factory
+DP-203,D2,Azure Stream Analytics
+DP-203,D2,Azure Synapse Pipelines
+DP-203,D3,RBAC
+DP-203,D3,Column-level security
+DP-203,D3,Row-level security
+DP-203,D3,Azure Purview
+DP-203,D4,Azure Monitor
+DP-203,D4,Query optimization
+DP-203,D4,Cost management
+DP-203,D4,Scaling strategies
+AZ-305,D1,Azure AD
+AZ-305,D1,Azure Policy
+AZ-305,D1,Azure Monitor
+AZ-305,D1,Management Groups
+AZ-305,D2,Azure SQL
+AZ-305,D2,Azure Cosmos DB
+AZ-305,D2,Azure Storage
+AZ-305,D2,Azure Data Lake
+AZ-305,D3,Azure Site Recovery
+AZ-305,D3,Azure Backup
+AZ-305,D3,Traffic Manager
+AZ-305,D3,Geo-redundancy
+AZ-305,D4,Azure Virtual Network
+AZ-305,D4,Azure Kubernetes Service
+AZ-305,D4,Azure App Service
+AZ-305,D4,Azure Load Balancer
+AI-102,D1,Azure AI services
+AI-102,D1,Responsible AI
+AI-102,D1,Cognitive Services resource
+AI-102,D1,Containers
+AI-102,D2,Azure OpenAI
+AI-102,D2,Prompt engineering
+AI-102,D2,Retrieval Augmented Generation
+AI-102,D2,Azure AI Studio
+AI-102,D3,Azure AI Vision
+AI-102,D3,Custom Vision
+AI-102,D3,Face API
+AI-102,D3,Video Indexer
+AI-102,D4,Azure AI Language
+AI-102,D4,Translator
+AI-102,D4,Speech
+AI-102,D4,Question Answering
+AI-102,D5,Azure AI Search
+AI-102,D5,Document Intelligence
+AI-102,D5,Knowledge store
+AI-102,D5,Skillsets
+DP-100,D1,Azure ML workspace
+DP-100,D1,Compute targets
+DP-100,D1,Datastores
+DP-100,D1,Data assets
+DP-100,D2,Automated ML
+DP-100,D2,MLflow
+DP-100,D2,Notebooks
+DP-100,D2,Hyperparameter tuning
+DP-100,D3,Pipelines
+DP-100,D3,Environments
+DP-100,D3,Model registry
+DP-100,D3,Components
+DP-100,D4,Online endpoints
+DP-100,D4,Batch endpoints
+DP-100,D4,Monitoring
+DP-100,D4,Responsible AI dashboard
+AI-900,D1,Responsible AI
+AI-900,D1,AI workloads
+AI-900,D1,Fairness
+AI-900,D1,Transparency
+AI-900,D2,Regression
+AI-900,D2,Classification
+AI-900,D2,Clustering
+AI-900,D2,Azure Machine Learning
+AI-900,D3,Image classification
+AI-900,D3,Object detection
+AI-900,D3,Azure AI Vision
+AI-900,D3,OCR
+AI-900,D4,Text analytics
+AI-900,D4,Speech
+AI-900,D4,Translation
+AI-900,D4,Azure AI Language
+AI-900,D5,Azure OpenAI
+AI-900,D5,Copilot
+AI-900,D5,Prompt engineering
+AI-900,D5,Foundation models
+SC-100,D1,Zero Trust
+SC-100,D1,Identity
+SC-100,D1,Microsoft Defender
+SC-100,D1,Conditional Access
+SC-100,D2,Compliance
+SC-100,D2,Microsoft Sentinel
+SC-100,D2,Security operations
+SC-100,D2,Microsoft Purview
+SC-100,D3,Endpoints
+SC-100,D3,Networks
+SC-100,D3,Compute
+SC-100,D3,Defender for Cloud
+SC-100,D4,Data security
+SC-100,D4,Application security
+SC-100,D4,DevSecOps
+SC-100,D4,Key management
+MS-102,D1,Tenant
+MS-102,D1,Domains
+MS-102,D1,Admin roles
+MS-102,D1,Service health
+MS-102,D2,Microsoft Entra ID
+MS-102,D2,Multi-factor authentication
+MS-102,D2,Conditional Access
+MS-102,D2,Self-service password reset
+MS-102,D3,Microsoft 365 Defender
+MS-102,D3,Safe Attachments
+MS-102,D3,Safe Links
+MS-102,D3,Threat policies
+MS-102,D4,Data loss prevention
+MS-102,D4,Retention
+MS-102,D4,Sensitivity labels
+MS-102,D4,eDiscovery

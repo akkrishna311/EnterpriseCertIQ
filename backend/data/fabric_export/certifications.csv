@@ -1,0 +1,10 @@
+cert_id,cert_name,role,recommended_study_hours,passing_score
+AZ-204,Developing Solutions for Microsoft Azure,Cloud Engineer,20,700
+AZ-400,Designing and Implementing Microsoft DevOps Solutions,DevOps Engineer,25,700
+DP-203,Data Engineering on Microsoft Azure,Data Engineer,22,700
+AZ-305,Designing Microsoft Azure Infrastructure Solutions,Cloud Architect,30,700
+AI-102,Azure AI Engineer Associate,AI Engineer,25,700
+DP-100,Azure Data Scientist Associate,Data Scientist,25,700
+AI-900,Azure AI Fundamentals,AI Practitioner,12,700
+SC-100,Microsoft Cybersecurity Architect Expert,Security Architect,30,700
+MS-102,Microsoft 365 Administrator Expert,Microsoft 365 Administrator,28,700

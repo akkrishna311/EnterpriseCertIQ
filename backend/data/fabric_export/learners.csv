@@ -1,0 +1,9 @@
+learner_id,display_name,role,team_id,cert_target,deadline
+L-1004,Learner-Alpha,Cloud Engineer,TEAM-A,AZ-204,2026-08-15
+L-1005,Learner-Beta,DevOps Engineer,TEAM-A,AZ-400,2026-08-01
+L-1006,Learner-Gamma,Data Engineer,TEAM-B,DP-203,2026-09-01
+L-1007,Learner-Delta,Cloud Engineer,TEAM-A,AZ-204,2026-08-15
+L-1008,Learner-Epsilon,Cloud Architect,TEAM-B,AZ-305,2026-10-01
+L-1013,Learner-Zeta,AI Engineer,TEAM-C,AI-102,2026-09-30
+L-1014,Learner-Eta,Data Scientist,TEAM-C,DP-100,2026-10-15
+L-1015,Learner-Theta,AI Practitioner,TEAM-C,AI-900,2026-07-31
