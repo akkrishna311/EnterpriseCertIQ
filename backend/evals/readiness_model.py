@@ -2,7 +2,7 @@
 
 Fits a logistic regression P(pass) on synthetic exam outcomes (pure numpy, seeded and
 deterministic — no sklearn) and reports in-sample + leave-one-out (LOO) AUC and Brier
-score, the same way the strongest competitors report a single calibrated metric.
+score as a single calibrated metric.
 
 Also exposes:
   - predict_pass_probability(...) — a calibrated probability for the app to surface

@@ -202,10 +202,9 @@ PY
 Foundry pulls the image, assigns a system-managed identity, and exposes a stable endpoint.
 Region: **East US 2 / Sweden Central** (preview); scale-to-zero after 15 min idle.
 
-## Honest status for the submission
+## Foundry integration status
 
-- "Uses Microsoft Foundry": ✅ via the Agent Service SDK (agents + threads) + Azure OpenAI
-  inference + Foundry IQ grounding.
-- Tracing in portal: ✅ once App Insights is connected (Step 2) — code side done.
-- Evaluations in portal: ✅ via `--upload` (Step 3) — code side done.
-- Hosted Agent container: optional/preview — recipe above; not required by the criteria.
+- **Agent Service SDK**: ✅ agents + threads registered via `azure-ai-projects` + Azure OpenAI inference + Foundry IQ grounding.
+- **Tracing in portal**: ✅ once App Insights is connected (Step 2) — code side done.
+- **Evaluations in portal**: ✅ via `--upload` (Step 3) — code side done.
+- **Hosted Agent container**: optional/preview — recipe above.

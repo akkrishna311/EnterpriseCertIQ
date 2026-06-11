@@ -2,8 +2,7 @@
 Rubric-based agent evaluation harness.
 
 Deterministic, zero-credential quality rubrics for each agent's *structured output*
-— the same idea as the competitor's `test_agent_evals.py` (E1–E7 checks with a pass
-threshold), but adapted to EnterpriseCertIQ's Pydantic contracts.
+E1–E7 checks with a pass threshold, adapted to EnterpriseCertIQ's Pydantic contracts.
 
 Unlike `groundedness.py` (LLM-as-judge, Azure), these rubrics are pure-Python
 assertions over the output shape and content rules, so they run in CI with no model

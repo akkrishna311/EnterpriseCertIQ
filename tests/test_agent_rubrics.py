@@ -1,7 +1,6 @@
 """Rubric-based agent-quality eval tests (deterministic, zero-credential).
 
-Mirrors the competitor's per-agent quality rubric pattern: good outputs pass the
-0.8 threshold; deliberately broken outputs fail the specific check.
+Good outputs pass the 0.8 threshold; deliberately broken outputs fail the specific check.
 """
 import json
 

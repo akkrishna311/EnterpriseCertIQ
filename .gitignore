@@ -37,3 +37,18 @@ backend/data/store/
 # Azure Developer CLI
 .azure/
 eval_results.json
+
+# Internal strategy / competition docs — kept locally, not published
+Reasoning\ Agents\ Criteria.txt
+SUBMISSION_CHECKLIST.md
+EnterpriseCertIQ_Design_Document_v1.2.md
+enterprise_agents_competitive_analysis_FINAL.md
+reasoning_agents_competitive_analysis_FINAL.md
+docs/EnterpriseAgentCriteria.txt
+docs/ReasoningAgentCriteria.txt
+docs/submission.md
+docs/competitive-position-assessment.md
+docs/competitor-athiq-comparison.md
+docs/judge-qna-playbook.md
+docs/foundry-evidence-runbook.md
+TODO.md

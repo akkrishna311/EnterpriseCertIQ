@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     foundry_iq_index_name: str = "cert-knowledge-base"
     # Dedicated Search admin key — separate from the Foundry model key
     azure_search_key: str = ""
+    # Foundry portal → Settings → Connections → Name of your Azure AI Search connection.
+    # When set, agents are registered with AzureAISearchTool (native Foundry IQ grounding).
+    # Leave empty to use the direct httpx fallback path.
+    foundry_search_connection_name: str = ""
+    # When true (and MODEL_BACKEND=azure_foundry), the curator, critic, and assessment agents
+    # are called via the Foundry Responses API with agent_reference so knowledge-base
+    # retrieval and citation injection happen server-side. Falls back to BaseAgent on any error.
+    foundry_use_responses_api: bool = False
 
     # ── Work IQ source ────────────────────────────────────────────────
     # synthetic (default): work signals from learners.json

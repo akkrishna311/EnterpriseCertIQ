@@ -6,10 +6,10 @@ Tier 2 = bounded retry on transient errors (BaseAgent._model_call).
 Tier 3 = these deterministic builders — pure Python over the synthetic data, the
          IQ layers, and the MCP tools. No model, no network, no credentials.
 
-Why: the competitor won a prior league partly on a zero-credential demo path that
-never fails in front of judges. This gives EnterpriseCertIQ the same guarantee —
-set `AGENT_FALLBACK_MODE=force` for a fully deterministic demo, or leave it on
-`auto` so a model outage degrades gracefully instead of breaking the pipeline.
+Why: a fully deterministic demo path that never fails on missing credentials or
+transient outages. Set `AGENT_FALLBACK_MODE=force` for a zero-credential demo, or
+leave it on `auto` so a model outage degrades gracefully instead of breaking the
+pipeline.
 
 Every builder returns data matching the agent's `response_format` (or a string for
 the unstructured intake/retrospective agents). Outputs carry an explicit

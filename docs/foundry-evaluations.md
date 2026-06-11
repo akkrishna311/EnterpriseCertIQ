@@ -1,7 +1,6 @@
 # Azure AI Foundry Evaluations
 
-How EnterpriseCertIQ produces **evaluation results visible in the Foundry portal** — the
-hackathon "show evaluation results in Foundry" requirement.
+How EnterpriseCertIQ produces **evaluation results visible in the Foundry portal**.
 
 ## What it is
 
@@ -91,7 +90,7 @@ context) and point `--dataset` at it. The schema is the same four columns.
 `backend/evals/groundedness.py` runs a lightweight groundedness check *inline* on every
 curator/critic output (heuristic locally; it auto-skips the Azure LLM judge for gpt-5/o
 deployments to avoid the `max_tokens` issue). The Foundry evaluation here is the **formal,
-portal-visible** batch evaluation for the submission.
+portal-visible** batch evaluation run.
 
 ## Telemetry (companion to evaluations)
 

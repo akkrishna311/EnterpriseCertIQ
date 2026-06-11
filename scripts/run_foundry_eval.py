@@ -1,7 +1,7 @@
 """
 Run Azure AI Foundry evaluations and (optionally) publish results to the Foundry portal.
 
-Satisfies the hackathon "show evaluation results in Foundry" requirement. Uses the
+Publishes evaluation results to the Foundry portal. Uses the
 `azure-ai-evaluation` SDK with LLM-judge evaluators (Groundedness, Relevance, Coherence,
 Fluency) over an eval dataset of grounded agent responses.
 

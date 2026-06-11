@@ -40,8 +40,8 @@ at your Ontology, running OBO the signed-in user** — not a backend SPN call.
 **Optional — web app calls Fabric IQ (OBO):** the browser signs the user in with Entra (MSAL),
 the backend forwards `Authorization: Bearer {user_token}` when calling the agent endpoint, and the
 Agent Service exchanges it for the Fabric audience (`https://analysis.windows.net/powerbi/api`).
-**Service principals are not allowed** — user-delegated only. For the hackathon, the playground
-demo (step 3) already counts as "uses Fabric IQ"; the web-app OBO is polish.
+**Service principals are not allowed** — user-delegated only. The playground
+demo (step 3) is the simplest integration path; the web-app OBO is polish.
 
 **App integration — IMPLEMENTED (backend):** `POST /api/fabric-iq/ask` (in `backend/main.py`)
 forwards the caller's `Authorization: Bearer <user_token>` to the Foundry agent via

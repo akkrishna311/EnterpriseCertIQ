@@ -674,6 +674,7 @@ async def health():
         "llm_cache": llm_cache.stats(),
         "audio": "azure_speech" if (s.enable_audio and s.speech_key and s.speech_region) else "transcript_only",
         "foundry_agents": foundry_mode(),
+        "foundry_responses_api": "enabled" if s.foundry_use_responses_api else "disabled",
         "key_vault": "configured" if s.azure_key_vault_url else "off",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -746,6 +747,7 @@ async def run_workflow(req: RunWorkflowRequest):
                     run_id=run_id,
                 )
                 await foundry.complete(ctx)
+            foundry_thread_url = getattr(foundry, "thread_url", None)
             # Save plan to storage
             final_plan = ctx.outputs.get("final_plan")
             if final_plan:
@@ -776,8 +778,11 @@ async def run_workflow(req: RunWorkflowRequest):
                 except Exception as e:
                     logger.warning("Could not save plan", error=str(e))
             # Signal completion
-            q.put_nowait({"type": "workflow_complete", "run_id": run_id,
-                          "status": ctx.trace.final_status})
+            complete_payload: dict = {"type": "workflow_complete", "run_id": run_id,
+                                      "status": ctx.trace.final_status}
+            if foundry_thread_url:
+                complete_payload["foundry_thread_url"] = foundry_thread_url
+            q.put_nowait(complete_payload)
         except Exception as e:
             error_message = str(e)
             if s.model_backend.value == "foundry_local" and "APIConnectionError" in error_message:

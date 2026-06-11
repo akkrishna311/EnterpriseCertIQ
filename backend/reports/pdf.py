@@ -8,8 +8,8 @@ Two report types — both carry the AI-generated disclosure and use synthetic ID
                                  Fabric IQ skill-gap, pinned interventions/peer sessions.
 
 A small demo cache (`backend/data/store/report_cache/`) serves pre-generated PDFs for
-demo learners instantly on repeat clicks — the live-demo reliability trick the competitor
-used. Real (non-demo) requests always regenerate.
+demo learners instantly on repeat clicks for a reliable live demo.
+Real (non-demo) requests always regenerate.
 """
 from __future__ import annotations
 

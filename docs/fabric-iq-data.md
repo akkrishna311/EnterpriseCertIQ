@@ -80,5 +80,5 @@ CLIENT_SECRET` and the backend connects automatically (else stays local).
 | **Pipeline + Git** | commit `fabric_export/` to a repo; a Fabric **Data pipeline** pulls + overwrites tables on a trigger | repeatable / CI |
 | **OneLake = source of truth** | stop syncing from JSON; edit the Delta tables directly in Fabric and let local read from Azure via `FABRIC_IQ_ENDPOINT` | once you go Azure-first |
 
-For the hackathon, **manual re-load** is enough: the export script makes JSON→CSV one command,
+For development, **manual re-load** is enough: the export script makes JSON→CSV one command,
 and "Load to Tables (overwrite)" makes the reload one click — so Azure always mirrors local.

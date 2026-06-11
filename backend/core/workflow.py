@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from backend.core.telemetry import workflow_span
+from backend.core.foundry_grounded_agent import call_grounded_agent, responses_api_enabled
 from backend.models.learner import LearnerProfile
 from backend.models.trace import ReasoningTrace, TraceEvent, TraceEventType
 from backend.mcp_server.server import (
@@ -226,18 +227,20 @@ class WorkflowOrchestrator:
             ctx.set_output("intake", intake_result)
 
             # ── Stage 2: Learning Path Curator ──────────────────────────────
-            curator_result = await self.curator.run(
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Learner profile:\n{intake_result.content}\n\n"
-                        f"Cert target: {learner.cert_target}\n"
-                        "Map this cert to skill topics. Retrieve approved content and "
-                        "Microsoft Learn paths. Cite every recommendation."
-                    )
-                }],
-                run_id=run_id,
-                context=base_ctx,
+            _curator_messages = [{
+                "role": "user",
+                "content": (
+                    f"Learner profile:\n{intake_result.content}\n\n"
+                    f"Cert target: {learner.cert_target}\n"
+                    "Map this cert to skill topics. Retrieve approved content and "
+                    "Microsoft Learn paths. Cite every recommendation."
+                )
+            }]
+            curator_result = (
+                await call_grounded_agent("curator", _curator_messages, run_id=run_id)
+                if responses_api_enabled() else None
+            ) or await self.curator.run(
+                messages=_curator_messages, run_id=run_id, context=base_ctx,
             )
             ctx.set_output("curator", curator_result)
             curated_topics = _structured_payload(curator_result)
@@ -278,21 +281,24 @@ class WorkflowOrchestrator:
 
             critique_history = [plan_payload]
             for round_n in range(1, self.max_critique_rounds + 1):
-                critic_result = await self.critic.run(
-                    messages=[{
-                        "role": "user",
-                        "content": (
-                            f"Learner: {learner.model_dump_json()}\n\n"
-                            f"Fabric IQ weighted domain thresholds (highest leverage first):\n"
-                            f"{_as_text(domain_thresholds)}\n\n"
-                            f"Study plan (round {round_n}):\n{_as_text(critique_history[-1])}\n\n"
-                            "Identify weaknesses: under-allocated high-leverage domains, schedule "
-                            "conflicts, prerequisite ordering. Weight objections by domain leverage. "
-                            "Return objections as JSON list with severity red/amber, description, "
-                            "recommendation, citation."
-                        )
-                    }],
-                    run_id=run_id,
+                _critic_messages = [{
+                    "role": "user",
+                    "content": (
+                        f"Learner: {learner.model_dump_json()}\n\n"
+                        f"Fabric IQ weighted domain thresholds (highest leverage first):\n"
+                        f"{_as_text(domain_thresholds)}\n\n"
+                        f"Study plan (round {round_n}):\n{_as_text(critique_history[-1])}\n\n"
+                        "Identify weaknesses: under-allocated high-leverage domains, schedule "
+                        "conflicts, prerequisite ordering. Weight objections by domain leverage. "
+                        "Return objections as JSON list with severity red/amber, description, "
+                        "recommendation, citation."
+                    )
+                }]
+                critic_result = (
+                    await call_grounded_agent("critic", _critic_messages, run_id=run_id)
+                    if responses_api_enabled() else None
+                ) or await self.critic.run(
+                    messages=_critic_messages, run_id=run_id,
                     context={**base_ctx, "plan": critique_history[-1]},
                 )
                 ctx.set_output(f"critic_round_{round_n}", critic_result)
@@ -394,20 +400,23 @@ class WorkflowOrchestrator:
             ))
 
             if self.assessment:
-                assessment_result = await self.assessment.run(
-                    messages=[{
-                        "role": "user",
-                        "content": (
-                            f"Learner: {learner.model_dump_json()}\n\n"
-                            f"Calibrated readiness forecast:\n{_as_text(forecast)}\n\n"
-                            f"Study plan:\n{_as_text(critique_history[-1])[:600]}\n\n"
-                            "Generate grounded, cited practice questions; evaluate readiness; "
-                            "and recommend advance / remediate / gather_evidence. Ground the "
-                            "next-step certification recommendation with foundry_iq_search. "
-                            "Return the AssessmentOutput JSON."
-                        )
-                    }],
-                    run_id=run_id,
+                _assessment_messages = [{
+                    "role": "user",
+                    "content": (
+                        f"Learner: {learner.model_dump_json()}\n\n"
+                        f"Calibrated readiness forecast:\n{_as_text(forecast)}\n\n"
+                        f"Study plan:\n{_as_text(critique_history[-1])[:600]}\n\n"
+                        "Generate grounded, cited practice questions; evaluate readiness; "
+                        "and recommend advance / remediate / gather_evidence. Ground the "
+                        "next-step certification recommendation with foundry_iq_search. "
+                        "Return the AssessmentOutput JSON."
+                    )
+                }]
+                assessment_result = (
+                    await call_grounded_agent("assessment", _assessment_messages, run_id=run_id)
+                    if responses_api_enabled() else None
+                ) or await self.assessment.run(
+                    messages=_assessment_messages, run_id=run_id,
                     context={**base_ctx, "forecast": forecast},
                 )
                 ctx.set_output("assessment", assessment_result)

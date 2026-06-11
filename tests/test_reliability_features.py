@@ -1,4 +1,4 @@
-"""Tests for the competitor-parity reliability/safety features:
+"""Tests for reliability and safety features:
 LLM response cache, Azure Content Safety guardrail, and PDF report export.
 """
 import pytest

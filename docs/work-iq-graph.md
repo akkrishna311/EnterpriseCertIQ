@@ -104,7 +104,7 @@ Add a meeting to the test mailbox's next 7 days → re-run a workflow → the le
 So the only thing that changed between synthetic and real Work IQ is **where steps 3–4 get
 their numbers** — every downstream agent is identical.
 
-## Production hardening (beyond the hackathon)
+## Production hardening
 
 - **App-only is not supported** for Work IQ; for unattended Graph calendar reads use
   `Calendars.Read` *application* permission + client-credentials (admin-consented) and read

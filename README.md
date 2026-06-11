@@ -190,23 +190,23 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...
 STORAGE_BACKEND=local
 ```
 
-### Lowest-cost build path for the hackathon
+### Two-phase development approach
 
-Use two phases instead of developing in Azure from day one.
+Use two phases to control Azure costs while building.
 
 | Phase | Backend | What to do here | Why this keeps costs down |
 |---|---|---|---|
 | 1. Build locally | `MODEL_BACKEND=foundry_local` | Build prompts, agent workflow, MCP tools, UI, synthetic datasets, HITL flow, and charts. | No cloud model cost while you iterate. |
-| 2. Criteria proof | `MODEL_BACKEND=azure_foundry` | Validate the final demo path with real Foundry deployment, real Foundry IQ grounding, telemetry, and evaluation. | Azure is only used for criteria-critical proof, not day-to-day iteration. |
+| 2. Cloud validation | `MODEL_BACKEND=azure_foundry` | Validate with real Foundry deployment, real Foundry IQ grounding, telemetry, and evaluation. | Azure is only used for cloud-specific proof, not day-to-day iteration. |
 
 Recommended sequence:
 
 1. Finish the product loop in Foundry Local.
 2. Switch only the model and IQ settings to Azure Foundry.
-3. Keep `STORAGE_BACKEND=local` unless you specifically need Cosmos DB for the demo.
-4. Run the final demo and screenshots against Azure so the IQ and hosted-platform story are real.
+3. Keep `STORAGE_BACKEND=local` unless you specifically need Cosmos DB.
+4. Run final tests and screenshots against Azure so the IQ and hosted-platform story are real.
 
-If you want strict criteria coverage with minimal Azure spend, the minimum Azure scope is:
+Minimum Azure scope for a production-ready deployment:
 
 1. One Azure Foundry model deployment.
 2. One real Foundry IQ knowledge source/index over the synthetic cert documents.

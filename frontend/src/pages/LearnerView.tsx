@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle, Headphones, ShieldCheck } from 'lucide-react'
+import { Play, BookOpen, Target, Zap, ClipboardList, Loader2, CheckCircle2, AlertTriangle, Headphones, ShieldCheck, ExternalLink } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { api, streamEvents, type TraceEvent, type AssessmentResult, type Forecast, type MasteryGrid, type ProgressSnapshot } from '../api/client'
 import ReasoningPanel from '../components/ReasoningPanel'
@@ -74,6 +74,7 @@ export default function LearnerView() {
   const [examResult, setExamResult] = useState<AssessmentResult | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [actionError, setActionError] = useState<string>()
+  const [foundryThreadUrl, setFoundryThreadUrl] = useState<string>()
 
   const { data: learners = [] } = useQuery({ queryKey: ['learners'], queryFn: api.learners })
   const learner = learners.find((l) => l.learner_id === selectedLearner)
@@ -119,7 +120,7 @@ export default function LearnerView() {
     setRunning(true)
     setActionError(undefined)
     setEvents([]); setObjections([]); setProgressSeries([]); setReadiness(undefined)
-    setPlanId(undefined); setPlanData(undefined); setPlanApproved(false)
+    setPlanId(undefined); setPlanData(undefined); setPlanApproved(false); setFoundryThreadUrl(undefined)
     setActiveTab('reasoning')
 
     try {
@@ -162,6 +163,7 @@ export default function LearnerView() {
         // on it would drop the Progress data.
         const isSentinel = !evt.event_id && (evt.type === 'workflow_complete' || evt.type === 'workflow_error')
         if (isSentinel) {
+          if (evt.foundry_thread_url) setFoundryThreadUrl(evt.foundry_thread_url)
           setRunning(false)
           stop()
           refetchMastery()
@@ -390,6 +392,18 @@ export default function LearnerView() {
             {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
             {running ? 'Building plan…' : 'Build My Plan'}
           </button>
+
+          {foundryThreadUrl && (
+            <a
+              href={foundryThreadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 bg-white border border-blue-300 text-blue-700 text-xs px-3 py-2 rounded-md font-medium hover:bg-blue-50 transition"
+            >
+              <ExternalLink size={12} />
+              View run in Foundry portal
+            </a>
+          )}
 
           {/* Mock exam controls */}
           <div className="pt-2 border-t border-gray-100 space-y-2">

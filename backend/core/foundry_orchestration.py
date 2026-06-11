@@ -7,8 +7,8 @@ module wraps each workflow run as an Azure AI Foundry agent thread so that:
   - Runs are visible and traceable in the Azure AI Foundry portal
   - Agent definitions are registered once and re-used across runs
   - The Foundry-native run lifecycle (created → queued → in_progress → completed)
-    is honoured, satisfying the submission requirement to "use Microsoft Foundry
-    (UI or SDK)" at the orchestration level — not just for model inference
+    is honoured — Microsoft Foundry is used at the orchestration level, not just
+    for model inference
 
 When running locally (foundry_local mode) or when azure-ai-projects is not
 installed the module is a no-op: all calls return immediately without error so
@@ -254,6 +254,26 @@ class FoundrySession:
         except Exception as e:
             logger.warning("FoundrySession.complete failed (non-fatal): %s", e)
 
+    @property
+    def thread_url(self) -> Optional[str]:
+        """Direct Foundry portal URL to this run's thread, or None if not in mirror mode."""
+        if not self._thread_id or not self._agent_id:
+            return None
+        try:
+            from config.settings import get_settings
+            endpoint = get_settings().azure_ai_project_endpoint or ""
+            # endpoint: https://<host>/api/projects/<project>
+            # portal:   https://ai.azure.com/agents/<project>/agents/<agent>/threads/<thread>
+            import re
+            m = re.search(r"/projects/([^/]+)$", endpoint)
+            project = m.group(1) if m else "aipoc"
+        except Exception:
+            project = "aipoc"
+        return (
+            f"https://ai.azure.com/agents/{project}"
+            f"/agents/{self._agent_id}/threads/{self._thread_id}"
+        )
+
     def _complete_sync(self, ctx: Any) -> None:
         outputs = getattr(ctx, "outputs", {})
         decision = outputs.get("readiness_decision", {})
@@ -310,16 +330,58 @@ async def register_all_agents() -> list[dict]:
     model = _active_model()
     defs = [_ORCHESTRATOR_DEF, *_AGENT_DEFINITIONS]
 
+    def _build_search_tool():
+        """Build AzureAISearchTool using the configured search connection (v2 SDK only)."""
+        try:
+            from azure.ai.projects.models import (
+                AzureAISearchTool, AzureAISearchToolResource,
+                AISearchIndexResource, AzureAISearchQueryType,
+            )
+            from config.settings import get_settings
+            s = get_settings()
+            conn_name = s.foundry_search_connection_name
+            if not conn_name:
+                return None
+            conn = client.connections.get(conn_name)
+            return AzureAISearchTool(
+                azure_ai_search=AzureAISearchToolResource(
+                    indexes=[AISearchIndexResource(
+                        project_connection_id=conn.id,
+                        index_name=s.foundry_iq_index_name,
+                        query_type=AzureAISearchQueryType.SIMPLE,
+                    )]
+                )
+            )
+        except Exception as e:
+            logger.warning("Could not build AzureAISearchTool (non-fatal): %s", e)
+            return None
+
+    # Agents that get native Foundry IQ grounding attached
+    _GROUNDED = {"eciq-learning-path-curator", "eciq-assessment-agent", "eciq-readiness-critic"}
+
     def _register_native():  # Path A — v2 create_version
         from azure.ai.projects.models import PromptAgentDefinition
+        search_tool = _build_search_tool()
+        if search_tool:
+            logger.info("Foundry IQ: AzureAISearchTool attached to grounded agents (index=%s)",
+                        get_settings().foundry_iq_index_name if True else "")
         out = []
         for d in defs:
-            definition = PromptAgentDefinition(model=model, instructions=d["instructions"])
+            attach = search_tool is not None and d["name"] in _GROUNDED
+            definition = PromptAgentDefinition(
+                kind="prompt",
+                model=model,
+                instructions=d["instructions"],
+                tools=[search_tool] if attach else [],
+            )
             v = client.agents.create_version(
                 agent_name=d["name"], definition=definition, description=d["description"],
             )
-            out.append({"name": d["name"], "version": getattr(v, "version", None), "status": "versioned"})
-            logger.info("Foundry (native) agent versioned: %s", d["name"])
+            out.append({
+                "name": d["name"], "version": getattr(v, "version", None),
+                "status": "versioned", "foundry_iq": attach,
+            })
+            logger.info("Foundry (native) agent versioned: %s (foundry_iq=%s)", d["name"], attach)
         return out
 
     def _register_mirror():  # Path B — v1 create_agent (create-or-reuse)
