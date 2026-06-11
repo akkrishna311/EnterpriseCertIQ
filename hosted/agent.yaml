@@ -1,0 +1,26 @@
+# Foundry Hosted Agent definition for EnterpriseCertIQ.
+# Deployed via project.agents.create_version(HostedAgentDefinition(...)) — see
+# docs/foundry-hosted-agents.md. Secrets come from Foundry project connections at sandbox
+# start (NOT baked into the image): ${{connections.<name>.credentials.<field>}}.
+name: eciq-orchestrator
+description: >-
+  EnterpriseCertIQ multi-agent learning orchestrator — intake → curator → planner →
+  readiness critic (replan loop) → engagement → assessment → manager insights, grounded in
+  Foundry IQ, Fabric IQ, and Work IQ. Synthetic data only.
+definition:
+  kind: hosted
+  image: ${ACR_LOGIN_SERVER}/enterprisecertiq-hosted:latest   # x86_64/linux/amd64
+  cpu: "1"            # 0.5 | 1 | 2  (paired GiB: 1 | 2 | 4)
+  memory: "2Gi"
+  container_protocol_versions: ["responses"]
+  port: 8088
+  readiness_path: /readiness
+  environment_variables:
+    MODEL_BACKEND: azure_foundry
+    AZURE_AI_PROJECT_ENDPOINT: ${{connections.foundry.credentials.project_endpoint}}
+    AZURE_OPENAI_ENDPOINT: ${{connections.foundry.credentials.openai_endpoint}}
+    AZURE_AI_MODEL_DEPLOYMENT: gpt-4.1
+    FOUNDRY_IQ_ENDPOINT: ${{connections.search.credentials.endpoint}}
+    AZURE_SEARCH_KEY: ${{connections.search.credentials.key}}
+    APPLICATIONINSIGHTS_CONNECTION_STRING: ${{connections.appinsights.credentials.connection_string}}
+    ENABLE_TELEMETRY: "true"

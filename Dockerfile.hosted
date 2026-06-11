@@ -1,0 +1,29 @@
+# EnterpriseCertIQ — Foundry Hosted Agent image.
+# MUST be x86_64/linux/amd64 (Foundry pulls from ACR over its public endpoint).
+#   docker buildx build --platform linux/amd64 -f Dockerfile.hosted \
+#       -t $ACR_LOGIN_SERVER/enterprisecertiq-hosted:latest --push .
+FROM --platform=linux/amd64 python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt requirements.azure.txt ./
+RUN pip install -r requirements.azure.txt
+# The Foundry protocol library (preview). If unavailable at build time, hosted/main.py
+# falls back to a FastAPI server implementing the same /responses + /readiness contract.
+RUN pip install azure-ai-agentserver-responses || echo "agentserver lib unavailable — using fallback"
+
+COPY backend/ ./backend/
+COPY config/ ./config/
+COPY prompts/ ./prompts/
+COPY hosted/ ./hosted/
+
+# Foundry gateway routes to the container's port 8088; /readiness is the health path.
+EXPOSE 8088
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:8088/readiness || exit 1
+
+CMD ["python", "-m", "hosted.main"]

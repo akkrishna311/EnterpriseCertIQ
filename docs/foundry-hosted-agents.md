@@ -166,6 +166,42 @@ MCPTool(server_label="enterprisecertiq", server_url="https://<host>/mcp",
 (Python SDK) that auto-run evaluators when an agent response completes — wire after the upgrade
 for live agent-quality dashboards.
 
+## Deploy THIS repo as a Hosted Agent (scaffold is in the tree)
+
+Files: `hosted/main.py` (Responses contract + `/readiness`, port 8088, wraps the full
+pipeline), `hosted/agent.yaml` (HostedAgentDefinition), `Dockerfile.hosted` (x86_64).
+Verified locally via the FastAPI fallback (`tests/test_hosted_agent.py`).
+
+```bash
+# 1. Build + push x86_64 image to ACR (must be publicly reachable)
+az acr login -n <acr>
+docker buildx build --platform linux/amd64 -f Dockerfile.hosted \
+    -t <acr>.azurecr.io/enterprisecertiq-hosted:latest --push .
+
+# 2. Create Foundry project connections for secrets (foundry / search / appinsights),
+#    referenced by hosted/agent.yaml as ${{connections.<name>.credentials.<field>}}.
+
+# 3. Register the hosted agent version (needs azure-ai-projects>=2.1.0 + az login)
+python - <<'PY'
+from azure.ai.projects import AIProjectClient
+from azure.ai.projects.models import HostedAgentDefinition
+from azure.identity import DefaultAzureCredential
+import os
+c = AIProjectClient(endpoint=os.environ["AZURE_AI_PROJECT_ENDPOINT"], credential=DefaultAzureCredential())
+v = c.agents.create_version(
+    agent_name="eciq-orchestrator",
+    definition=HostedAgentDefinition(
+        image=f"{os.environ['ACR_LOGIN_SERVER']}/enterprisecertiq-hosted:latest",
+        cpu="1", memory="2Gi", container_protocol_versions=["responses"],
+        environment_variables={"MODEL_BACKEND": "azure_foundry"},
+    ),
+)
+print("hosted agent version:", getattr(v, "version", v))
+PY
+```
+Foundry pulls the image, assigns a system-managed identity, and exposes a stable endpoint.
+Region: **East US 2 / Sweden Central** (preview); scale-to-zero after 15 min idle.
+
 ## Honest status for the submission
 
 - "Uses Microsoft Foundry": ✅ via the Agent Service SDK (agents + threads) + Azure OpenAI
