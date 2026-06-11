@@ -596,6 +596,23 @@ async def _build_manager_what_if_payload(team_id: str, learners: list[LearnerPro
 
 # ── Routes ─────────────────────────────────────────────────────────────────
 
+@app.get("/api/eval/summary")
+async def eval_summary():
+    """Trust & quality metrics for the UI: calibrated-model AUC, red-team scorecard,
+    content-safety mode. Cheap (model is cached; red-team is 16 regex screens)."""
+    from backend.evals.readiness_model import evaluate_readiness_model
+    from backend.middleware.red_team import run_red_team
+    from backend.middleware.content_safety import content_safety_mode
+    rm = evaluate_readiness_model()
+    rt = run_red_team()
+    return {
+        "readiness_model": {"auc_loo": rm["auc_loo"], "brier_loo": rm["brier_loo"], "n": rm["n"]},
+        "red_team": {"held": rt["held"], "total": rt["total"],
+                     "attack_success_rate": rt["attack_success_rate"]},
+        "content_safety": content_safety_mode(),
+    }
+
+
 class FabricIQAskRequest(BaseModel):
     question: str
 

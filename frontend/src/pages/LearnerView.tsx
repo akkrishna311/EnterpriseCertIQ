@@ -10,6 +10,7 @@ import AssessmentHistoryChart from '../components/AssessmentHistoryChart'
 import DomainMasteryChart from '../components/DomainMasteryChart'
 import ServiceHeatmap from '../components/ServiceHeatmap'
 import PassThresholdGauge from '../components/PassThresholdGauge'
+import TrustSafetyPanel from '../components/TrustSafetyPanel'
 import AIDisclosureBanner from '../components/AIDisclosureBanner'
 import StudyPlanView, { type StudyPlan } from '../components/StudyPlanView'
 import AudioBriefing from '../components/AudioBriefing'
@@ -574,6 +575,10 @@ export default function LearnerView() {
                 <div className="bg-white rounded-lg border border-gray-200 p-4 xl:col-span-2">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Service Confidence Heatmap</h3>
                   {mastery ? <ServiceHeatmap domains={mastery.domains} /> : <p className="text-gray-400 text-sm">Run a workflow first.</p>}
+                </div>
+                <div className="xl:col-span-2">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Trust &amp; Safety</h3>
+                  <TrustSafetyPanel />
                 </div>
               </div>
             )}

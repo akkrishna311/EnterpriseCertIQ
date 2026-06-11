@@ -74,6 +74,23 @@ export default function PassThresholdGauge({ forecast }: Props) {
         </div>
       </div>
 
+      {/* Calibrated P(pass) — logistic model, LOO AUC ≈ 0.80 */}
+      {forecast.calibrated && !forecast.calibrated.insufficient_evidence && forecast.calibrated.pass_probability != null && (
+        <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded p-3 text-sm">
+          <div>
+            <span className="text-indigo-900 font-semibold">Calibrated P(pass)</span>
+            <span className="block text-[11px] text-indigo-500">logistic model · LOO AUC ≈ 0.80 · abstains when thin</span>
+          </div>
+          <div className="text-right">
+            <span className="text-xl font-bold text-indigo-700">{Math.round(forecast.calibrated.pass_probability * 100)}%</span>
+            <span className={clsx('block text-[11px] font-medium',
+              forecast.calibrated.verdict === 'likely_pass' ? 'text-green-600' : 'text-amber-600')}>
+              {forecast.calibrated.verdict === 'likely_pass' ? 'likely pass' : 'at risk'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Weak area + hours */}
       <div className="bg-gray-50 rounded p-3 text-xs space-y-1 border border-gray-200">
         <p><span className="text-gray-500">Weakest area:</span> <strong>{forecast.weakest_topic}</strong></p>

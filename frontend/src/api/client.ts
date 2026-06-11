@@ -51,6 +51,7 @@ export const api = {
   progress: (lid: string, cid: string) => fetchJSON<ProgressSnapshot>(`/progress/${lid}/${cid}`),
   mastery: (lid: string, cid: string) => fetchJSON<MasteryGrid>(`/mastery/${lid}/${cid}`),
   forecast: (lid: string, cid: string) => fetchJSON<Forecast>(`/forecast/${lid}/${cid}`),
+  evalSummary: () => fetchJSON<EvalSummary>('/eval/summary'),
   generateAssessment: (lid: string, cid: string, difficulty?: string, count = 20) => {
     const diff = difficulty && difficulty !== 'Mixed' ? `&difficulty=${difficulty}` : ''
     return postNoBodyJSON<Assessment>(
@@ -175,6 +176,17 @@ export interface Forecast {
   weakest_topic: string
   minimum_additional_hours: number
   insufficient_evidence: boolean
+  calibrated?: {
+    insufficient_evidence: boolean
+    pass_probability?: number
+    verdict?: string
+  }
+}
+
+export interface EvalSummary {
+  readiness_model: { auc_loo: number; brier_loo: number; n: number }
+  red_team: { held: number; total: number; attack_success_rate: number }
+  content_safety: string
 }
 
 export interface ProgressPoint {
