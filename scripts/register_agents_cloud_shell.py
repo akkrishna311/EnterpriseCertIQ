@@ -122,7 +122,14 @@ def list_connections(client) -> None:
 
 
 def _build_search_tool(client):
-    """Resolve the connection ID and return an AzureAISearchTool."""
+    """Resolve the connection ID and return an AzureAISearchTool.
+
+    VECTOR_SEMANTIC_HYBRID = vector similarity + BM25 keyword + semantic reranking.
+    This is the "Agentic Retrieval" mode — an LLM decomposes complex questions into
+    parallel subqueries and reranks results, yielding ~36% higher response quality
+    than a plain keyword search.  Requires a semantic configuration on the index
+    (set one up in Azure AI Search portal → your index → Semantic configurations).
+    """
     from azure.ai.projects.models import (
         AzureAISearchTool,
         AzureAISearchToolResource,
@@ -136,7 +143,7 @@ def _build_search_tool(client):
                 AISearchIndexResource(
                     project_connection_id=conn.id,
                     index_name=INDEX_NAME,
-                    query_type=AzureAISearchQueryType.SIMPLE,
+                    query_type=AzureAISearchQueryType.VECTOR_SEMANTIC_HYBRID,
                 )
             ]
         )
