@@ -44,13 +44,21 @@ def test_build_ssml_has_two_voices_and_escapes(monkeypatch):
     assert ssml.count("<voice") == 2
 
 
-def test_is_configured_false_by_default():
-    # No SPEECH_KEY/REGION in the test env → transcript-only mode.
+def test_is_configured_false_by_default(monkeypatch):
+    # Simulate no speech credentials — .env.local may have them set, so we clear them.
+    from config.settings import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "speech_key", "")
+    monkeypatch.setattr(s, "speech_region", "")
     assert podcast.is_configured() is False
 
 
 @pytest.mark.asyncio
-async def test_synthesize_raises_when_not_configured():
+async def test_synthesize_raises_when_not_configured(monkeypatch):
+    from config.settings import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "speech_key", "")
+    monkeypatch.setattr(s, "speech_region", "")
     script = PodcastScript(cert_id="AZ-204",
                            turns=[{"speaker": "host_a", "text": "hi"}])
     with pytest.raises(podcast.AudioNotConfigured):
