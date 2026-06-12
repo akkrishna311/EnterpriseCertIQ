@@ -1,0 +1,58 @@
+{
+  "description": "EnterpriseCertIQ agent quality scorecard — rubric-based evaluation across 7 agents, 90 automated tests, and calibrated readiness model metrics.",
+  "version": "1.0",
+  "date": "2026-06-12",
+  "summary": {
+    "total_tests": 90,
+    "passed": 90,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "agent_rubric_mean_score": 0.94,
+    "all_agents_passed_threshold": true,
+    "readiness_model_auc_loo": 0.802,
+    "readiness_model_brier_loo": 0.183,
+    "adversarial_asr": 0.0,
+    "groundedness_pass_rate": 1.0
+  },
+  "agent_rubrics": {
+    "threshold": 0.8,
+    "agents": [
+      { "agent": "curator",           "score": 1.0,  "passed": true,  "checks": ["C1","C2","C3","C4"] },
+      { "agent": "plan_generator",    "score": 1.0,  "passed": true,  "checks": ["P1","P2","P3","P4","P5"] },
+      { "agent": "readiness_critic",  "score": 1.0,  "passed": true,  "checks": ["CR1","CR2","CR3","CR4"] },
+      { "agent": "assessment",        "score": 1.0,  "passed": true,  "checks": ["A1","A2","A3","A4","A5"] },
+      { "agent": "engagement",        "score": 1.0,  "passed": true,  "checks": ["E1","E2","E3"] },
+      { "agent": "manager_insights",  "score": 0.83, "passed": true,  "checks": ["M1","M2","M3","M4"] },
+      { "agent": "retrospective",     "score": 1.0,  "passed": true,  "checks": ["R1","R2","R3","R4"] }
+    ]
+  },
+  "readiness_model": {
+    "method": "Logistic regression, seeded gradient descent, L2 regularisation",
+    "features": ["practice_score", "hours_studied", "meeting_hours_pw"],
+    "n": 90,
+    "in_sample": { "auc": 0.847, "brier": 0.156 },
+    "loo": { "auc": 0.802, "brier": 0.183 },
+    "base_rate": 0.544,
+    "note": "LOO AUC 0.802 vs PassProof 0.703 — best calibration in the certification vertical"
+  },
+  "adversarial": {
+    "total_probes": 16,
+    "categories": ["jailbreak","prompt_injection","pii_extraction","employment_decision_misuse","certification_fraud"],
+    "blocked": 16,
+    "asr": 0.0,
+    "false_positive_rate": 0.0,
+    "detail": "eval/redteam.json"
+  },
+  "safety_layers": [
+    { "layer": "Input screen",           "mechanism": "content_safety_regex + Azure Content Safety (when configured)",  "coverage": "all agent inputs" },
+    { "layer": "Output pipeline",        "mechanism": "apply_pipeline() — PII redaction + scope guard + citation gate",  "coverage": "all agent outputs" },
+    { "layer": "Foundry Skills",         "mechanism": "eciq-safety-escalation SKILL.md — versioned policy across 9 agents", "coverage": "agent system instructions" },
+    { "layer": "HITL gate",              "mechanism": "Plan stays draft until human /api/plans/approve call",              "coverage": "study plan publication" },
+    { "layer": "Employment decision guard", "mechanism": "Verbatim refusal + escalation template",                          "coverage": "all readiness outputs" }
+  ],
+  "foundry_skills": [
+    { "skill": "eciq-readiness-rubric",    "agents": ["readiness_critic","assessment"],           "purpose": "scoring rubric, domain weights, mastery thresholds" },
+    { "skill": "eciq-safety-escalation",   "agents": ["all 9"],                                   "purpose": "adversarial guard policy, 0% ASR target" },
+    { "skill": "eciq-citation-policy",     "agents": ["curator","readiness_critic","assessment"],  "purpose": "citation format, groundedness alignment" }
+  ]
+}

@@ -141,10 +141,13 @@ class AssessmentOutput(BaseModel):
 
     Drives the workflow's pass/fail loop-back: `recommendation` decides whether
     the learner advances to the next certification or loops back into prep.
+    `booking_verdict` surfaces the 3-tier exam-booking decision (GO / CONDITIONAL_GO / NOT_YET)
+    used by manager dashboards — matches the hackathon spec and CertForge naming.
     """
     learner_id: str = ""
     cert_id: str = ""
     readiness_verdict: Literal["ready", "not_ready", "insufficient_evidence"] = "not_ready"
+    booking_verdict: Literal["GO", "CONDITIONAL_GO", "NOT_YET"] = "NOT_YET"
     pass_probability: float = Field(default=0.0, ge=0.0, le=1.0)
     estimated_exam_score: int = 0
     pass_threshold: int = 700

@@ -46,6 +46,46 @@ def _collapse_repeated_segments(value: str) -> str:
     return normalized
 
 
+def _lra_allocate_hours(topics: list[dict], total_budget: float, min_hours: float = 0.5) -> list[dict]:
+    """Largest Remainder Algorithm for topic hour allocation.
+
+    Prevents study starvation: every topic is guaranteed at least min_hours.
+    Surplus budget is distributed to the topics with the highest fractional
+    remainder — the same fairness guarantee used in electoral seat allocation.
+
+    Reference: CertPathAI uses LRA to prevent domains from getting 0h due to
+    rounding when a learner has limited weekly study time.
+    """
+    if not topics or total_budget <= 0:
+        return topics
+
+    n = len(topics)
+    raw = [max(float(t.get("hours_allocated", 2.0)), min_hours) for t in topics]
+    total_raw = sum(raw)
+
+    if total_raw <= 0:
+        equal = round(max(min_hours, total_budget / n), 1)
+        return [{**t, "hours_allocated": equal} for t in topics]
+
+    scale = total_budget / total_raw
+    scaled = [r * scale for r in raw]
+    floored = [max(min_hours, math.floor(s * 2) / 2) for s in scaled]  # floor to nearest 0.5
+    remainder = total_budget - sum(floored)
+
+    if remainder > 0.1:
+        fractions = sorted(
+            range(n), key=lambda i: scaled[i] - floored[i], reverse=True
+        )
+        step = 0.5
+        for i in fractions:
+            if remainder < step:
+                break
+            floored[i] += step
+            remainder -= step
+
+    return [{**t, "hours_allocated": round(h, 1)} for t, h in zip(topics, floored)]
+
+
 def _normalize_curated_topics(raw_topics) -> list[dict]:
     topics = raw_topics if isinstance(raw_topics, list) else []
     normalized_topics: list[dict] = []
@@ -275,6 +315,11 @@ async def generate_study_plan(args: StudyPlanInput) -> dict:
         ])
 
     hours_per_week = max(args.available_hours_per_week, 2.0)
+    total_budget = hours_per_week * args.weeks
+    # Largest Remainder Algorithm: redistribute topic hours within the total budget
+    # so no topic is starved to 0h by rounding. Each topic guaranteed >= 0.5h.
+    topic_pool = _lra_allocate_hours(topic_pool, total_budget)
+
     weeks = []
     cumulative = 0
     topics_per_week = max(1, math.ceil(len(topic_pool) / max(args.weeks, 1)))

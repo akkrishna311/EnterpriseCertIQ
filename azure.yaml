@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# EnterpriseCertIQ — Azure Developer CLI manifest
+# Usage: azd up
+#
+# Provisions:
+#   - Azure AI Foundry project (9 registered Hosted Agents)
+#   - Azure AI Search (Foundry IQ knowledge base, VECTOR_SEMANTIC_HYBRID)
+#   - Azure App Service (FastAPI backend + FastMCP server)
+#   - Application Insights (OpenTelemetry traces)
+#
+# Prerequisites:
+#   az login && azd auth login
+#   cp .env.example .env.local && fill in AZURE_AI_PROJECT_ENDPOINT + AZURE_AI_API_KEY
+
+name: enterprisecertiq
+metadata:
+  template: enterprisecertiq@1.0.0
+
+services:
+  backend:
+    project: .
+    language: py
+    host: appservice
+
+hooks:
+  preprovision:
+    posix:
+      shell: sh
+      run: |
+        echo "Verifying Azure AI Foundry connection..."
+        python scripts/register_agents_cloud_shell.py --dry-run
+      continueOnError: true
+    windows:
+      shell: pwsh
+      run: python scripts/register_agents_cloud_shell.py --dry-run
+      continueOnError: true
+
+  postprovision:
+    posix:
+      shell: sh
+      run: |
+        echo "Registering Foundry Hosted Agents (VECTOR_SEMANTIC_HYBRID search)..."
+        python scripts/register_agents_cloud_shell.py
+        echo "Registering Foundry Skills (versioned behavioral governance)..."
+        python scripts/register_skills.py --list
+      continueOnError: true
+    windows:
+      shell: pwsh
+      run: |
+        python scripts/register_agents_cloud_shell.py
+        python scripts/register_skills.py --list
+      continueOnError: true

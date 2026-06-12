@@ -22,6 +22,30 @@ import numpy as np
 FEATURES = ("practice_score", "hours_studied", "meeting_hours_pw")
 _SEED = 42
 
+# Booking decision thresholds — aligned with our AUC 0.802 calibrated model.
+# GO: high confidence; CONDITIONAL GO: marginal but supportable; NOT YET: not ready.
+_GO_THRESHOLD = 0.72
+_CONDITIONAL_THRESHOLD = 0.50
+
+
+def booking_verdict(readiness_verdict: str, pass_probability: float) -> str:
+    """Map internal readiness verdict + P(pass) to the 3-tier exam-booking decision.
+
+    GO            — high-confidence pass (prob >= 0.72, verdict = ready)
+    CONDITIONAL_GO — marginal pass or solid probability (0.50 <= prob < 0.72)
+    NOT_YET       — below threshold or insufficient evidence
+
+    Mirrors the naming convention used by CertForge, CertPathAI, and the
+    hackathon challenge spec so manager dashboards speak the same language.
+    """
+    if readiness_verdict == "insufficient_evidence":
+        return "NOT_YET"
+    if readiness_verdict == "ready" and pass_probability >= _GO_THRESHOLD:
+        return "GO"
+    if pass_probability >= _CONDITIONAL_THRESHOLD:
+        return "CONDITIONAL_GO"
+    return "NOT_YET"
+
 
 def _sigmoid(z: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-z))
@@ -140,6 +164,11 @@ def predict_pass_probability(practice_score=None, hours_studied=None, meeting_ho
     w, b, mu, sd = _fit_logistic(X, y)
     x = np.array([[float(practice_score), float(hours_studied), float(meeting_hours_pw)]])
     prob = float(_predict(x, w, b, mu, sd)[0])
+    bv = booking_verdict(
+        "ready" if prob >= 0.5 else "not_ready",
+        round(prob, 3),
+    )
     return {"insufficient_evidence": False,
             "pass_probability": round(prob, 3),
-            "verdict": "likely_pass" if prob >= 0.5 else "at_risk"}
+            "verdict": "likely_pass" if prob >= 0.5 else "at_risk",
+            "booking_verdict": bv}

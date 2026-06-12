@@ -103,6 +103,8 @@ def _rubric_assessment(payload: Any) -> RubricResult:
     sq = d.get("sample_questions", [])
     r.add("A4", "Sample questions cited (if present)",
           all(q.get("citation") for q in sq) if sq else True)
+    r.add("A5", "Booking verdict present (GO / CONDITIONAL_GO / NOT_YET)",
+          d.get("booking_verdict") in {"GO", "CONDITIONAL_GO", "NOT_YET"})
     return r.finalize()
 
 

@@ -390,6 +390,29 @@ async def _build_manager_insight_payload(team_id: str, learners: list[LearnerPro
     if skill_gaps.get("top_priority_gaps"):
         risk_areas.append(skill_gaps["narrative"])
 
+    # ROI cost-of-delay: each month a certified engineer is delayed costs the
+    # organisation an estimated fraction of the certification salary uplift.
+    _CERT_UPLIFT = {
+        "AZ-204": 18000, "AZ-305": 22000, "AZ-104": 14000, "AZ-400": 20000,
+        "AZ-900": 8000,  "SC-900": 7000,  "AI-900": 8000,  "DP-900": 7500,
+        "DP-203": 16000, "AI-102": 17000,
+    }
+    at_risk_n = readiness_distribution["at_risk"]
+    primary_cert = team_certs[0] if team_certs else "AZ-204"
+    uplift = _CERT_UPLIFT.get(primary_cert, 15000)
+    monthly_cost = round(at_risk_n * uplift / 12)
+    roi_summary = {
+        "at_risk_headcount": at_risk_n,
+        "cert": primary_cert,
+        "cert_market_value_uplift_usd": uplift,
+        "monthly_delay_cost_usd": monthly_cost,
+        "narrative": (
+            f"{at_risk_n} learner(s) are below the {primary_cert} pass threshold. "
+            f"Each month of delay costs approximately ${monthly_cost:,} in unrealised "
+            f"salary uplift across the team."
+        ) if at_risk_n > 0 else "All tracked learners are on track — no current delay cost.",
+    }
+
     return {
         **context,
         "summary": summary,
@@ -399,6 +422,7 @@ async def _build_manager_insight_payload(team_id: str, learners: list[LearnerPro
         "peer_learning_pairs": peer_pairs,
         "manager_actions": manager_actions,
         "fabric_iq": fabric_iq,
+        "roi_summary": roi_summary,
     }
 
 
@@ -932,6 +956,45 @@ async def submit_assessment(req: AssessmentSubmitRequest):
     stored["forecast"] = forecast
     await storage.save_assessment(stored)
 
+    # Auto-trigger manager intervention after 2 consecutive NOT YET verdicts.
+    if not stored["passed"]:
+        recent = await storage.list_assessments(req.learner_id, req.cert_id)
+        submitted_sorted = sorted(
+            [a for a in recent if a.get("submitted_at") and "passed" in a],
+            key=lambda a: a.get("submitted_at", ""), reverse=True,
+        )
+        if len(submitted_sorted) >= 2 and not submitted_sorted[1].get("passed"):
+            try:
+                learner_obj = _load_learner(req.learner_id)
+                team_id_auto = learner_obj.team_id
+                import uuid as _uuid_mod
+                await storage.save_manager_intervention({
+                    "id": str(_uuid_mod.uuid4()),
+                    "team_id": team_id_auto,
+                    "learner_id": req.learner_id,
+                    "priority": "high",
+                    "reasons": [
+                        f"{req.learner_id} scored below the {pass_threshold} pass threshold in 2 consecutive {req.cert_id} assessments.",
+                        f"Latest score: {estimated_score} (threshold: {pass_threshold}). Prior attempt also below threshold.",
+                        "Recommend immediate manager check-in and study plan review.",
+                    ],
+                    "owner_id": team_id_auto,
+                    "status": "open",
+                    "manager_note": (
+                        f"Auto-triggered: {req.learner_id} missed the {req.cert_id} pass threshold twice in a row. "
+                        "Review capacity signals and consider protecting study blocks."
+                    ),
+                    "trigger": "consecutive_not_yet",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            except Exception:
+                pass  # never block the assessment response for an intervention write failure
+
+    from backend.evals.readiness_model import booking_verdict as _bv
+    passed = estimated_score >= pass_threshold
+    bv = _bv("ready" if passed else "not_ready",
+              float(forecast.get("pass_probability", 0.0)) if isinstance(forecast, dict) else 0.0)
+
     return {
         "assessment_id": req.assessment_id,
         "learner_id": req.learner_id,
@@ -939,7 +1002,8 @@ async def submit_assessment(req: AssessmentSubmitRequest):
         "questions_scored": total,
         "estimated_exam_score": estimated_score,
         "pass_threshold": pass_threshold,
-        "passed": estimated_score >= pass_threshold,
+        "passed": passed,
+        "booking_verdict": bv,
         "forecast": forecast,
         "ai_disclosure": "AI-generated assessment result",
     }
