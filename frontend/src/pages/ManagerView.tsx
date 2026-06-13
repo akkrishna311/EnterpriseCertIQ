@@ -416,7 +416,11 @@ export default function ManagerView() {
   })
   const draftPlans = teamLearners.flatMap((learner, index) => {
     const allDrafts = (planQueries[index]?.data ?? [])
-      .filter((p: DraftPlan) => p.status !== 'approved')
+      .filter((p: DraftPlan) =>
+        p.status !== 'approved' &&
+        (p.total_planned_hours ?? 0) > 0 &&
+        (p.weeks?.length ?? 0) > 0,
+      )
       .sort((a: DraftPlan, b: DraftPlan) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
     const latest = allDrafts[0]
     return latest ? [{ ...latest, learner }] : []
