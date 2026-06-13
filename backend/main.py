@@ -859,7 +859,7 @@ async def get_trace(run_id: str):
 
 @app.get("/api/plans/{learner_id}")
 async def get_plans(learner_id: str):
-    return await storage.list_traces(learner_id)
+    return await storage.list_plans(learner_id)
 
 
 @app.post("/api/plans/approve")

@@ -27,9 +27,10 @@ interface Props {
   plan?: StudyPlan
   approved: boolean
   onApproved: () => void
+  canApprove?: boolean
 }
 
-export default function StudyPlanView({ plan, approved, onApproved }: Props) {
+export default function StudyPlanView({ plan, approved, onApproved, canApprove = false }: Props) {
   if (!plan) {
     return (
       <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-400">
@@ -73,7 +74,7 @@ export default function StudyPlanView({ plan, approved, onApproved }: Props) {
       </div>
 
       {/* Approval gate */}
-      <HITLApprovalGate planId={plan.plan_id} alreadyApproved={approved} onApproved={onApproved} />
+      <HITLApprovalGate planId={plan.plan_id} alreadyApproved={approved} onApproved={onApproved} canApprove={canApprove} />
 
       {/* Weekly breakdown */}
       <div className="space-y-3">

@@ -495,7 +495,7 @@ export default function LearnerView() {
 
           {activeTab === 'plan' && (
             <div className="mt-3">
-              <StudyPlanView plan={planData} approved={planApproved} onApproved={() => setPlanApproved(true)} />
+              <StudyPlanView plan={planData} approved={planApproved} onApproved={() => setPlanApproved(true)} canApprove={false} />
             </div>
           )}
 

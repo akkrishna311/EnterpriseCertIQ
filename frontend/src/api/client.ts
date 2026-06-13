@@ -47,7 +47,8 @@ export const api = {
   learner: (id: string) => fetchJSON<Learner>(`/learners/${id}`),
   teams: () => fetchJSON<Team[]>('/teams'),
   runWorkflow: (learner_id: string) => postJSON<{ run_id: string }>('/workflow/run', { learner_id }),
-  approvePlan: (plan_id: string) => postJSON('/plans/approve', { plan_id, approved_by: 'human' }),
+  approvePlan: (plan_id: string) => postJSON('/plans/approve', { plan_id, approved_by: 'manager' }),
+  listPlans: (lid: string) => fetchJSON<DraftPlan[]>(`/plans/${lid}`),
   progress: (lid: string, cid: string) => fetchJSON<ProgressSnapshot>(`/progress/${lid}/${cid}`),
   mastery: (lid: string, cid: string) => fetchJSON<MasteryGrid>(`/mastery/${lid}/${cid}`),
   forecast: (lid: string, cid: string) => fetchJSON<Forecast>(`/forecast/${lid}/${cid}`),
@@ -356,6 +357,17 @@ export interface MemberContext {
   focus_hours_pw: number
   capacity_risk: string
   recommended_slots: string[]
+}
+
+export interface DraftPlan {
+  plan_id: string
+  learner_id: string
+  cert_id: string
+  status?: string
+  deadline?: string
+  total_planned_hours?: number
+  weeks?: { week: number; topics: { title: string }[]; planned_hours: number }[]
+  created_at?: string
 }
 
 export interface TraceEvent {

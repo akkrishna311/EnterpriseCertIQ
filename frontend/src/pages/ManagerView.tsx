@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Users, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react'
+import { Users, AlertTriangle, CheckCircle, HelpCircle, UserCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { api, type Learner, type ManagerIntervention, type ManagerInterventionRequest, type ManagerWhatIfRequest, type ManagerWhatIfResult, type MasteryGrid, type PeerLearningSession, type PeerLearningSessionRequest, type ProgressSnapshot, type Team, type TeamInsights } from '../api/client'
+import { api, type DraftPlan, type Learner, type ManagerIntervention, type ManagerInterventionRequest, type ManagerWhatIfRequest, type ManagerWhatIfResult, type MasteryGrid, type PeerLearningSession, type PeerLearningSessionRequest, type ProgressSnapshot, type Team, type TeamInsights } from '../api/client'
 import AIDisclosureBanner from '../components/AIDisclosureBanner'
 import clsx from 'clsx'
 
@@ -374,6 +374,12 @@ export default function ManagerView() {
   const runWhatIf = useMutation<ManagerWhatIfResult, Error, ManagerWhatIfRequest>({
     mutationFn: (payload) => api.managerWhatIf(selectedTeam, payload),
   })
+  const approvePlan = useMutation({
+    mutationFn: (planId: string) => api.approvePlan(planId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['plans'] })
+    },
+  })
 
   const team = teams.find((t) => t.team_id === selectedTeam)
   const managerOwnerId = team?.manager_id ?? 'manager'
@@ -401,6 +407,21 @@ export default function ManagerView() {
       enabled: !!team,
     })),
   })
+  const planQueries = useQueries({
+    queries: teamLearners.map((learner) => ({
+      queryKey: ['plans', learner.learner_id],
+      queryFn: () => api.listPlans(learner.learner_id),
+      enabled: !!team,
+    })),
+  })
+  const draftPlans = teamLearners.flatMap((learner, index) => {
+    const allDrafts = (planQueries[index]?.data ?? [])
+      .filter((p: DraftPlan) => p.status !== 'approved')
+      .sort((a: DraftPlan, b: DraftPlan) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+    const latest = allDrafts[0]
+    return latest ? [{ ...latest, learner }] : []
+  })
+
   const progressData = progressQueries.map((query) => query.data).filter(Boolean) as ProgressSnapshot[]
   const learnerById = new Map(teamLearners.map((learner) => [learner.learner_id, learner]))
   const memberContextById = new Map((insights?.members ?? []).map((member) => [member.employee_id, member]))
@@ -643,7 +664,7 @@ export default function ManagerView() {
           </button>
           <select
             value={selectedTeam}
-            onChange={(e) => setSelectedTeam(e.target.value)}
+            onChange={(e) => { setSelectedTeam(e.target.value); runWhatIf.reset() }}
             className="text-sm border border-gray-300 rounded px-3 py-1.5"
           >
             {teams.map((t) => (
@@ -656,6 +677,54 @@ export default function ManagerView() {
       <AIDisclosureBanner message="AI-generated team insights; verify before use in performance or HR decisions." />
 
       {isLoading && <p className="text-gray-400 text-sm">Loading team insights…</p>}
+
+      {draftPlans.length > 0 && (
+        <div className="bg-white rounded-lg border border-amber-300 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+                <UserCheck size={15} /> Plans Pending Your Approval
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">Review AI-generated study plans before they go live for your team members.</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">{draftPlans.length} pending</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {draftPlans.map((plan) => (
+              <div key={plan.plan_id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{plan.learner.learner_id} — {plan.cert_id}</p>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">{plan.plan_id}</p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Draft</span>
+                </div>
+                <div className="flex gap-4 text-xs text-slate-600">
+                  <span>{plan.total_planned_hours ?? 0}h total</span>
+                  <span>{plan.weeks?.length ?? 0} weeks</span>
+                  {plan.deadline && <span>Deadline: {plan.deadline}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => approvePlan.mutate(plan.plan_id)}
+                    disabled={approvePlan.isPending}
+                    className="text-xs px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60 font-medium"
+                  >
+                    {approvePlan.isPending ? 'Approving…' : '✓ Approve & Publish'}
+                  </button>
+                  <Link
+                    to={`/?learner=${plan.learner.learner_id}&tab=plan`}
+                    className="text-xs px-3 py-1.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-100 font-medium"
+                  >
+                    Review Plan
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {insights && (
         <>
