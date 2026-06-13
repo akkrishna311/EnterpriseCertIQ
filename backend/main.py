@@ -10,6 +10,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 import structlog
@@ -1290,30 +1291,36 @@ def _audio_user_message(ctx: dict) -> str:
     )
 
 
-# Script cache: keyed by (learner_id, cert_id, normalised_focus).
-# Ensures the transcript endpoint and the MP3 endpoint always use the same
-# generated text — the audio agent runs at temperature=0.4 so two independent
-# LLM calls would produce different scripts, causing text/audio mismatch.
-_audio_script_cache: dict[tuple, dict] = {}
+# Per-key locks for script generation (in-memory is fine; lock lifetime = process).
 _audio_script_locks: dict[tuple, asyncio.Lock] = {}
+
+
+def _script_cache_path(learner_id: str, cert_id: str, focus: str) -> Path:
+    import hashlib
+    slug = hashlib.sha256(f"{learner_id}|{cert_id}|{focus}".encode()).hexdigest()[:16]
+    d = Path(get_settings().store_dir) / "audio_scripts"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{slug}.json"
 
 
 async def _generate_audio_script(learner_id: str, cert_id: str, focus: Optional[str] = None) -> dict:
     from backend.agents.factory import build_audio_agent
     from backend.agents.fallbacks import build_fallback
 
-    cache_key = (learner_id, cert_id, (focus or "").strip().lower())
+    norm_focus = (focus or "").strip().lower()
+    lock_key = (learner_id, cert_id, norm_focus)
+    cache_path = _script_cache_path(learner_id, cert_id, norm_focus)
 
-    # Return cached script so transcript + MP3 always match.
-    if cache_key in _audio_script_cache:
-        return _audio_script_cache[cache_key]
+    # Fast path: script already on disk — survives backend restarts.
+    if cache_path.exists():
+        return json.loads(cache_path.read_text())
 
-    # Per-key lock: concurrent requests for the same podcast generate only once.
-    if cache_key not in _audio_script_locks:
-        _audio_script_locks[cache_key] = asyncio.Lock()
-    async with _audio_script_locks[cache_key]:
-        if cache_key in _audio_script_cache:  # re-check after acquiring lock
-            return _audio_script_cache[cache_key]
+    # Per-key lock prevents duplicate generation under concurrent requests.
+    if lock_key not in _audio_script_locks:
+        _audio_script_locks[lock_key] = asyncio.Lock()
+    async with _audio_script_locks[lock_key]:
+        if cache_path.exists():  # re-check after acquiring lock
+            return json.loads(cache_path.read_text())
 
         ctx = await _build_audio_context(learner_id, cert_id, focus)
         agent = build_audio_agent()
@@ -1326,7 +1333,9 @@ async def _generate_audio_script(learner_id: str, cert_id: str, focus: Optional[
             payload["focus"] = (ctx["focus_domain"] or {}).get("name", "") if ctx["focus_domain"] else "overview"
             payload["is_weakest"] = ctx["is_weakest"]
 
-        _audio_script_cache[cache_key] = payload
+        # Persist to disk so transcript and MP3 always use the same script
+        # even if the backend restarts between the two requests.
+        cache_path.write_text(json.dumps(payload))
         return payload
 
 
