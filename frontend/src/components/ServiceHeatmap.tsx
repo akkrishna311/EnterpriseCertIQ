@@ -6,10 +6,10 @@ interface Props {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  strong: 'bg-emerald-500/15 text-green-800 border-green-200',
+  strong: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
   developing: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  weak: 'bg-rose-500/15 text-red-800 border-rose-500/30',
-  unknown: 'bg-white/10 text-ink-muted border-line',
+  weak: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  unknown: 'bg-white/10 text-ink-muted border-line-strong',
 }
 
 function ServiceChip({ cell }: { cell: ServiceCell }) {
@@ -19,7 +19,7 @@ function ServiceChip({ cell }: { cell: ServiceCell }) {
       STATUS_STYLE[cell.status] ?? STATUS_STYLE.unknown
     )}>
       {cell.service_name}
-      <span className="ml-1 opacity-60">{Math.round(cell.mastery_pct)}%</span>
+      <span className="ml-1 font-semibold opacity-80">{Math.round(cell.mastery_pct)}%</span>
     </span>
   )
 }
@@ -40,11 +40,11 @@ export default function ServiceHeatmap({ domains }: Props) {
           <span key={k} className={clsx('px-2 py-0.5 rounded border', STATUS_STYLE[k])}>{v}</span>
         ))}
       </div>
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-white/10">
         {domains.map((d) => (
           <div key={d.domain_id} className="py-2">
-            <div className="text-xs font-semibold text-ink-muted mb-1.5">
-              {d.name} <span className="font-normal text-ink-subtle">({d.weight_pct}% of exam)</span>
+            <div className="text-xs font-semibold text-ink mb-1.5">
+              {d.name} <span className="font-normal text-ink-muted">({d.weight_pct}% of exam)</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {d.services && d.services.length > 0 ? (
