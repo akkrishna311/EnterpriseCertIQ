@@ -402,9 +402,9 @@ export default function LearnerView() {
           </div>
           <div className="rounded-md border border-blue-500/30 bg-blue-500/10 px-3 py-3 text-xs space-y-2">
             <div>
-              <p className="font-semibold text-blue-900">Suggested next step</p>
-              <p className="mt-1 text-blue-300">{nextStep.title}</p>
-              <p className="mt-1 text-blue-300">{nextStep.detail}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-300">Suggested next step</p>
+              <p className="mt-1 font-semibold text-ink">{nextStep.title}</p>
+              <p className="mt-1 text-ink-muted">{nextStep.detail}</p>
             </div>
             <button
               type="button"
