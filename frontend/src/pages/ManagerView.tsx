@@ -695,7 +695,7 @@ export default function ManagerView() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {draftPlans.map((plan) => (
-              <div key={plan.plan_id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 space-y-3">
+              <div key={`${plan.plan_id}:${plan.learner.learner_id}`} className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{plan.learner.learner_id} — {plan.cert_id}</p>
