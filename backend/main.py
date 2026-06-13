@@ -1290,22 +1290,44 @@ def _audio_user_message(ctx: dict) -> str:
     )
 
 
+# Script cache: keyed by (learner_id, cert_id, normalised_focus).
+# Ensures the transcript endpoint and the MP3 endpoint always use the same
+# generated text — the audio agent runs at temperature=0.4 so two independent
+# LLM calls would produce different scripts, causing text/audio mismatch.
+_audio_script_cache: dict[tuple, dict] = {}
+_audio_script_locks: dict[tuple, asyncio.Lock] = {}
+
+
 async def _generate_audio_script(learner_id: str, cert_id: str, focus: Optional[str] = None) -> dict:
     from backend.agents.factory import build_audio_agent
     from backend.agents.fallbacks import build_fallback
 
-    ctx = await _build_audio_context(learner_id, cert_id, focus)
-    agent = build_audio_agent()
-    result = await agent.run(messages=[{"role": "user", "content": _audio_user_message(ctx)}], context=ctx)
-    payload = result.parsed.model_dump(mode="json") if result.parsed is not None else None
-    if not payload or not payload.get("turns"):
-        payload = await build_fallback("audio_curriculum", ctx)  # last-resort deterministic
-    # annotate what was taught (the endpoint's selection is authoritative).
-    if isinstance(payload, dict):
-        payload["mode"] = ctx["mode"]
-        payload["focus"] = (ctx["focus_domain"] or {}).get("name", "") if ctx["focus_domain"] else "overview"
-        payload["is_weakest"] = ctx["is_weakest"]
-    return payload
+    cache_key = (learner_id, cert_id, (focus or "").strip().lower())
+
+    # Return cached script so transcript + MP3 always match.
+    if cache_key in _audio_script_cache:
+        return _audio_script_cache[cache_key]
+
+    # Per-key lock: concurrent requests for the same podcast generate only once.
+    if cache_key not in _audio_script_locks:
+        _audio_script_locks[cache_key] = asyncio.Lock()
+    async with _audio_script_locks[cache_key]:
+        if cache_key in _audio_script_cache:  # re-check after acquiring lock
+            return _audio_script_cache[cache_key]
+
+        ctx = await _build_audio_context(learner_id, cert_id, focus)
+        agent = build_audio_agent()
+        result = await agent.run(messages=[{"role": "user", "content": _audio_user_message(ctx)}], context=ctx)
+        payload = result.parsed.model_dump(mode="json") if result.parsed is not None else None
+        if not payload or not payload.get("turns"):
+            payload = await build_fallback("audio_curriculum", ctx)
+        if isinstance(payload, dict):
+            payload["mode"] = ctx["mode"]
+            payload["focus"] = (ctx["focus_domain"] or {}).get("name", "") if ctx["focus_domain"] else "overview"
+            payload["is_weakest"] = ctx["is_weakest"]
+
+        _audio_script_cache[cache_key] = payload
+        return payload
 
 
 @app.get("/api/audio/concepts/{learner_id}/{cert_id}")
