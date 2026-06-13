@@ -16,20 +16,18 @@ import StudyPlanView, { type StudyPlan } from '../components/StudyPlanView'
 import AudioBriefing from '../components/AudioBriefing'
 import RAIPanel from '../components/RAIPanel'
 
-function mergeObjections(existing: any[], incoming: any[]): any[] {
-  const merged = [...existing]
-  for (const objection of incoming) {
-    const key = `${objection?.objection_id ?? 'unknown'}|${objection?.description ?? ''}|${objection?.recommendation ?? ''}`
-    const currentIndex = merged.findIndex((item) => (
-      `${item?.objection_id ?? 'unknown'}|${item?.description ?? ''}|${item?.recommendation ?? ''}` === key
-    ))
-    if (currentIndex >= 0) {
-      merged[currentIndex] = { ...merged[currentIndex], ...objection }
-      continue
+// The critic runs in a self-correction loop: each round emits one
+// critic_objection event carrying that round's COMPLETE objection list against
+// the current plan. We only ever want the latest round's snapshot — accumulating
+// across rounds produced duplicate cards (same O1–O4 reworded each round).
+function latestObjectionsFromEvents(events: TraceEvent[]): any[] {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i] as any
+    if ((e.event_type ?? e.type) === 'critic_objection') {
+      return (e.data?.objections as any[]) ?? []
     }
-    merged.push(objection)
   }
-  return merged
+  return []
 }
 
 type TabKey = 'reasoning' | 'plan' | 'critic' | 'progress' | 'readiness' | 'assessment' | 'audio' | 'safety'
@@ -135,14 +133,20 @@ export default function LearnerView() {
     if (events.length > 0) return
     if (runId) {
       api.getTrace(runId).then((trace) => {
-        if (trace.events?.length) setEvents(trace.events)
+        if (trace.events?.length) {
+          setEvents(trace.events)
+          setObjections(latestObjectionsFromEvents(trace.events))
+        }
       }).catch(() => { /* trace not ready — ignore */ })
     } else if (planId) {
       api.listTraces(selectedLearner).then((traces) => {
         const latest = traces[0]
         if (latest?.run_id) {
           setRunId(latest.run_id)
-          if (latest.events?.length) setEvents(latest.events)
+          if (latest.events?.length) {
+            setEvents(latest.events)
+            setObjections(latestObjectionsFromEvents(latest.events))
+          }
         }
       }).catch(() => { /* ignore */ })
     }
@@ -167,7 +171,8 @@ export default function LearnerView() {
           setEvents((prev) => [...prev, evt])
         }
         if (eventType === 'critic_objection') {
-          setObjections((prev) => mergeObjections(prev, evt.data?.objections ?? []))
+          // Each critic round emits a complete snapshot — replace, don't accumulate.
+          setObjections(evt.data?.objections ?? [])
         }
         if (eventType === 'tool_result' && evt.data?.tool === 'generate_study_plan') {
           const result = evt.data?.result
