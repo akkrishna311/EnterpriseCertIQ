@@ -423,6 +423,8 @@ export default function ManagerView() {
     const allDrafts = (planQueries[index]?.data ?? [])
       .filter((p: DraftPlan) =>
         p.status !== 'approved' &&
+        p.learner_id === learner.learner_id &&
+        p.cert_id === learner.cert_target &&
         (p.total_planned_hours ?? 0) > 0 &&
         (p.weeks?.length ?? 0) > 0,
       )
