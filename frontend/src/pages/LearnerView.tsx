@@ -128,13 +128,25 @@ export default function LearnerView() {
     }).catch(() => setPlanId(undefined))
   }, [planId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Restore trace events from backend when runId is in URL but events haven't been loaded yet.
+  // Restore trace events: if runId is known, fetch that trace directly.
+  // If runId is absent (e.g. navigated via Manager "Review Plan" link) fall back
+  // to the most-recent trace for this learner so the Journey Trace tab isn't blank.
   useEffect(() => {
-    if (!runId || events.length > 0) return
-    api.getTrace(runId).then((trace) => {
-      if (trace.events?.length) setEvents(trace.events)
-    }).catch(() => { /* trace not ready yet — ignore */ })
-  }, [runId]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (events.length > 0) return
+    if (runId) {
+      api.getTrace(runId).then((trace) => {
+        if (trace.events?.length) setEvents(trace.events)
+      }).catch(() => { /* trace not ready — ignore */ })
+    } else if (planId) {
+      api.listTraces(selectedLearner).then((traces) => {
+        const latest = traces[0]
+        if (latest?.run_id) {
+          setRunId(latest.run_id)
+          if (latest.events?.length) setEvents(latest.events)
+        }
+      }).catch(() => { /* ignore */ })
+    }
+  }, [runId, planId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRun() {
     if (!learner) return

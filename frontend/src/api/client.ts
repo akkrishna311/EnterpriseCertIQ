@@ -51,6 +51,7 @@ export const api = {
   listPlans: (lid: string) => fetchJSON<DraftPlan[]>(`/plans/${lid}`),
   getPlan: (planId: string) => fetchJSON<DraftPlan>(`/plan/${planId}`),
   getTrace: (runId: string) => fetchJSON<{ run_id: string; events: TraceEvent[] }>(`/workflow/${runId}/trace`),
+  listTraces: (learnerId: string) => fetchJSON<{ run_id: string; learner_id: string; events: TraceEvent[]; started_at?: string }[]>(`/traces/${learnerId}`),
   progress: (lid: string, cid: string) => fetchJSON<ProgressSnapshot>(`/progress/${lid}/${cid}`),
   mastery: (lid: string, cid: string) => fetchJSON<MasteryGrid>(`/mastery/${lid}/${cid}`),
   forecast: (lid: string, cid: string) => fetchJSON<Forecast>(`/forecast/${lid}/${cid}`),

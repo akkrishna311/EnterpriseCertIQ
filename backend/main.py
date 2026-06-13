@@ -857,6 +857,13 @@ async def get_trace(run_id: str):
     return trace
 
 
+@app.get("/api/traces/{learner_id}")
+async def list_traces_for_learner(learner_id: str):
+    """Return all traces for a learner, newest first — used to restore run state after navigation."""
+    traces = await storage.list_traces(learner_id)
+    return sorted(traces, key=lambda t: t.get("started_at") or t.get("_updated_at") or "", reverse=True)
+
+
 @app.get("/api/plan/{plan_id}")
 async def get_plan_by_id(plan_id: str):
     """Fetch a single plan by ID — used by the frontend to restore state after navigation."""

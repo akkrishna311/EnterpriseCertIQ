@@ -368,7 +368,14 @@ async def generate_study_plan(args: StudyPlanInput) -> dict:
         "requires_approval": True,
     }
     from backend.storage.store import get_storage as _get_storage
-    await _get_storage().save_plan(plan)
+    _storage = _get_storage()
+    # Delete all previous draft plans for this learner+cert so the manager
+    # never sees stale cards from earlier workflow runs.
+    existing = await _storage.list_plans(args.learner_id, args.cert_id)
+    for old in existing:
+        if old.get("status") == "draft":
+            await _storage._store.delete("study_plans", old.get("id") or old.get("plan_id", ""))
+    await _storage.save_plan(plan)
     return plan
 
 
