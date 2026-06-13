@@ -37,7 +37,7 @@ function agentStatus(events: TraceEvent[], name: string): 'idle' | 'running' | '
 function StatusIcon({ status }: { status: string }) {
   if (status === 'done') return <CheckCircle size={16} className="text-green-500" />
   if (status === 'running') return <Loader size={16} className="text-blue-500 animate-spin" />
-  if (status === 'error') return <AlertCircle size={16} className="text-red-500" />
+  if (status === 'error') return <AlertCircle size={16} className="text-rose-400" />
   return <Circle size={16} className="text-gray-300" />
 }
 
@@ -83,7 +83,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
   return (
     <div className="h-full flex flex-col bg-gray-900 text-gray-100 rounded-lg overflow-hidden">
       <div className="px-4 py-3 bg-gray-800 border-b border-gray-700 text-sm font-semibold">
-        Live Journey Trace {runId && <span className="text-gray-400 font-mono text-xs ml-2">{runId.slice(0, 8)}</span>}
+        Live Journey Trace {runId && <span className="text-ink-subtle font-mono text-xs ml-2">{runId.slice(0, 8)}</span>}
       </div>
 
       {/* Agent pipeline status */}
@@ -99,7 +99,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
                   status === 'done' && 'border-green-600 bg-green-900/30 text-green-300',
                   status === 'running' && 'border-blue-500 bg-blue-900/30 text-blue-300',
                   status === 'error' && 'border-red-500 bg-red-900/30 text-red-300',
-                  status === 'idle' && 'border-gray-700 text-gray-500'
+                  status === 'idle' && 'border-gray-700 text-ink-muted'
                 )}
               >
                 <StatusIcon status={status} />
@@ -112,13 +112,13 @@ export default function ReasoningPanel({ events, runId }: Props) {
 
       {latestOutputs.length > 0 && (
         <div className="px-4 py-3 border-b border-gray-700 space-y-2 bg-gray-950/40">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Latest Step Summaries</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">Latest Step Summaries</div>
           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {latestOutputs.map(({ agentName, content, structuredOutput, groundedness, warnings }) => (
               <details key={agentName} className="rounded border border-gray-800 bg-gray-900/70">
                 <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-gray-200 flex items-center justify-between">
                   <span>{AGENT_LABELS[agentName] ?? agentName}</span>
-                  <span className="text-gray-500">expand</span>
+                  <span className="text-ink-muted">expand</span>
                 </summary>
                 <div className="px-3 pb-3 space-y-2 text-xs">
                   {typeof content === 'string' && content.trim() && (
@@ -143,7 +143,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
       {/* Event log */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1 scrollbar-thin text-xs font-mono">
         {events.length === 0 && (
-          <p className="text-gray-500 text-center mt-8">Build your plan to see each journey step complete...</p>
+          <p className="text-ink-muted text-center mt-8">Build your plan to see each journey step complete...</p>
         )}
         {events.map((e) => (
           <div key={e.event_id} className={clsx(
@@ -155,23 +155,23 @@ export default function ReasoningPanel({ events, runId }: Props) {
           )}>
             <div className="flex-1">
               <div className="flex gap-2">
-                <span className="text-gray-500 shrink-0">
+                <span className="text-ink-muted shrink-0">
                   {new Date(e.timestamp).toLocaleTimeString()}
                 </span>
-                <span className="text-gray-400">[{AGENT_LABELS[e.agent_name] ?? e.agent_name}]</span>
+                <span className="text-ink-subtle">[{AGENT_LABELS[e.agent_name] ?? e.agent_name}]</span>
                 <span>{e.event_type.replace(/_/g, ' ')}</span>
                 {e.data?.tool != null && <span className="text-cyan-300">→ {String(e.data.tool)}</span>}
                 {typeof e.data?.message === 'string' && <span className="text-red-300">- {e.data.message}</span>}
               </div>
               {(typeof e.data?.content === 'string' && e.data.content.trim()) && (
                 <details className="mt-1 ml-16">
-                  <summary className="cursor-pointer text-gray-400">view output</summary>
+                  <summary className="cursor-pointer text-ink-subtle">view output</summary>
                   <pre className="mt-1 whitespace-pre-wrap rounded bg-gray-950 p-2 text-gray-200 font-mono">{e.data.content}</pre>
                 </details>
               )}
               {e.event_type === 'tool_result' && e.data?.result != null && (
                 <details className="mt-1 ml-16">
-                  <summary className="cursor-pointer text-gray-400">view tool result</summary>
+                  <summary className="cursor-pointer text-ink-subtle">view tool result</summary>
                   <pre className="mt-1 whitespace-pre-wrap rounded bg-gray-950 p-2 text-cyan-200 font-mono">{formatEventValue(e.data.result)}</pre>
                 </details>
               )}
@@ -190,7 +190,7 @@ export default function ReasoningPanel({ events, runId }: Props) {
 
       {/* Tool call count */}
       {toolCalls.length > 0 && (
-        <div className="px-4 py-2 bg-gray-800 border-t border-gray-700 text-xs text-gray-400">
+        <div className="px-4 py-2 bg-gray-800 border-t border-gray-700 text-xs text-ink-subtle">
           {toolCalls.length} workflow actions · {events.length} total updates
         </div>
       )}

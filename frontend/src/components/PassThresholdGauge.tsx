@@ -9,10 +9,10 @@ interface Props {
 export default function PassThresholdGauge({ forecast }: Props) {
   if (forecast.insufficient_evidence) {
     return (
-      <div className="text-center py-6 text-sm text-gray-500">
+      <div className="text-center py-6 text-sm text-ink-muted">
         <div className="text-3xl mb-2">?</div>
         <p className="font-medium">Insufficient evidence to forecast</p>
-        <p className="text-xs mt-1 text-gray-400">Complete at least one assessment to generate a forecast.</p>
+        <p className="text-xs mt-1 text-ink-subtle">Complete at least one assessment to generate a forecast.</p>
       </div>
     )
   }
@@ -43,31 +43,31 @@ export default function PassThresholdGauge({ forecast }: Props) {
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-2xl font-bold" style={{ color }}>{pct}%</span>
-            <span className="text-xs text-gray-400">pass prob.</span>
+            <span className="text-xs text-ink-subtle">pass prob.</span>
           </div>
         </div>
 
         {/* Score breakdown */}
         <div className="flex-1 space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-600">Estimated score</span>
-            <span className={clsx('font-bold', score >= threshold ? 'text-green-600' : 'text-red-600')}>
+            <span className="text-ink-muted">Estimated score</span>
+            <span className={clsx('font-bold', score >= threshold ? 'text-emerald-300' : 'text-rose-300')}>
               {score} / 1000
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Pass threshold</span>
+            <span className="text-ink-muted">Pass threshold</span>
             <span className="font-medium">{threshold}</span>
           </div>
           {gap > 0 && (
             <div className="flex justify-between">
-              <span className="text-gray-600">Points needed</span>
-              <span className="text-red-600 font-medium">+{gap} pts</span>
+              <span className="text-ink-muted">Points needed</span>
+              <span className="text-rose-300 font-medium">+{gap} pts</span>
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-gray-600">Confidence interval</span>
-            <span className="text-gray-500 text-xs">
+            <span className="text-ink-muted">Confidence interval</span>
+            <span className="text-ink-muted text-xs">
               [{Math.round(forecast.confidence_interval_lower * 100)}% – {Math.round(forecast.confidence_interval_upper * 100)}%]
             </span>
           </div>
@@ -76,15 +76,15 @@ export default function PassThresholdGauge({ forecast }: Props) {
 
       {/* Calibrated P(pass) — logistic model, LOO AUC ≈ 0.80 */}
       {forecast.calibrated && !forecast.calibrated.insufficient_evidence && forecast.calibrated.pass_probability != null && (
-        <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded p-3 text-sm">
+        <div className="flex items-center justify-between bg-violet-500/10 border border-violet-500/30 rounded p-3 text-sm">
           <div>
-            <span className="text-indigo-900 font-semibold">Calibrated P(pass)</span>
-            <span className="block text-[11px] text-indigo-500">logistic model · LOO AUC ≈ 0.80 · abstains when thin</span>
+            <span className="text-violet-200 font-semibold">Calibrated P(pass)</span>
+            <span className="block text-[11px] text-violet-300">logistic model · LOO AUC ≈ 0.80 · abstains when thin</span>
           </div>
           <div className="text-right">
-            <span className="text-xl font-bold text-indigo-700">{Math.round(forecast.calibrated.pass_probability * 100)}%</span>
+            <span className="text-xl font-bold text-violet-300">{Math.round(forecast.calibrated.pass_probability * 100)}%</span>
             <span className={clsx('block text-[11px] font-medium',
-              forecast.calibrated.verdict === 'likely_pass' ? 'text-green-600' : 'text-amber-600')}>
+              forecast.calibrated.verdict === 'likely_pass' ? 'text-emerald-300' : 'text-amber-300')}>
               {forecast.calibrated.verdict === 'likely_pass' ? 'likely pass' : 'at risk'}
             </span>
           </div>
@@ -92,9 +92,9 @@ export default function PassThresholdGauge({ forecast }: Props) {
       )}
 
       {/* Weak area + hours */}
-      <div className="bg-gray-50 rounded p-3 text-xs space-y-1 border border-gray-200">
-        <p><span className="text-gray-500">Weakest area:</span> <strong>{forecast.weakest_topic}</strong></p>
-        <p><span className="text-gray-500">Min. additional study hours to reach 75% probability:</span> <strong>{forecast.minimum_additional_hours}h</strong></p>
+      <div className="bg-white/5 rounded p-3 text-xs space-y-1 border border-line">
+        <p><span className="text-ink-muted">Weakest area:</span> <strong>{forecast.weakest_topic}</strong></p>
+        <p><span className="text-ink-muted">Min. additional study hours to reach 75% probability:</span> <strong>{forecast.minimum_additional_hours}h</strong></p>
       </div>
     </div>
   )

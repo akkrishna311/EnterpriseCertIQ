@@ -8,7 +8,7 @@ interface Props {
 export default function AssessmentHistoryChart({ attempts }: Props) {
   if (!attempts.length) {
     return (
-      <div className="flex items-center justify-center h-48 bg-gray-50 rounded border border-dashed border-gray-300 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-48 bg-white/5 rounded border border-dashed border-line-strong text-ink-subtle text-sm">
         Submitted mock exams will appear here as a score trend.
       </div>
     )
@@ -30,9 +30,9 @@ export default function AssessmentHistoryChart({ attempts }: Props) {
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-gray-700">Assessment Trend</h3>
-        <p className="text-xs text-gray-500">Each submitted mock exam is persisted and plotted as a learner trend.</p>
-        <p className={`text-xs mt-1 ${latestDelta === null ? 'text-gray-500' : latestDelta >= 0 ? 'text-green-700' : 'text-amber-700'}`}>
+        <h3 className="text-sm font-semibold text-ink">Assessment Trend</h3>
+        <p className="text-xs text-ink-muted">Each submitted mock exam is persisted and plotted as a learner trend.</p>
+        <p className={`text-xs mt-1 ${latestDelta === null ? 'text-ink-muted' : latestDelta >= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
           {formatDelta(latestDelta)}
         </p>
       </div>
@@ -49,19 +49,19 @@ export default function AssessmentHistoryChart({ attempts }: Props) {
           <Line type="monotone" dataKey="score_pct" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4 }} />
         </LineChart>
       </ResponsiveContainer>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-ink-muted">
         {attempts.slice().reverse().map((attempt) => {
           const previous = attempt.attempt_number > 1 ? attempts[attempt.attempt_number - 2] : undefined
           const delta = previous ? Math.round((attempt.score_pct - previous.score_pct) * 10) / 10 : null
           return (
-          <div key={attempt.assessment_id} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+          <div key={attempt.assessment_id} className="rounded-md border border-line bg-white/5 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-gray-700">Attempt {attempt.attempt_number}</span>
-              <span className={attempt.passed ? 'text-green-700' : 'text-amber-700'}>{attempt.passed ? 'PASS' : 'REVIEW'}</span>
+              <span className="font-medium text-ink">Attempt {attempt.attempt_number}</span>
+              <span className={attempt.passed ? 'text-emerald-300' : 'text-amber-300'}>{attempt.passed ? 'PASS' : 'REVIEW'}</span>
             </div>
             <div>{attempt.score_pct}% score · {attempt.estimated_exam_score} / 1000</div>
             <div>{attempt.difficulty} · {attempt.question_count} questions</div>
-            <div className={delta === null ? 'text-gray-500' : delta >= 0 ? 'text-green-700' : 'text-amber-700'}>
+            <div className={delta === null ? 'text-ink-muted' : delta >= 0 ? 'text-emerald-300' : 'text-amber-300'}>
               {delta === null ? 'First attempt on record' : `${delta > 0 ? '+' : ''}${delta}% vs previous`}
             </div>
           </div>

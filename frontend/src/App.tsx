@@ -12,21 +12,26 @@ function Nav() {
     { to: '/manager', label: 'Manager', icon: <Users size={16} /> },
   ]
   return (
-    <nav className="bg-brand-900 text-white px-6 py-3 flex items-center gap-8 shadow-lg">
-      <div className="flex items-center gap-2 font-bold text-lg tracking-tight">
-        <Brain size={22} className="text-blue-300" />
-        EnterpriseCertIQ
+    <nav className="sticky top-0 z-30 flex items-center gap-8 border-b border-line bg-[var(--canvas-2)]/80 px-6 py-3 backdrop-blur-xl">
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-accent to-brand-600 shadow-glow">
+          <Brain size={20} className="text-white" />
+        </span>
+        <div className="leading-tight">
+          <div className="text-[15px] font-bold tracking-tight text-ink">EnterpriseCertIQ</div>
+          <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-ink-subtle">Certification Intelligence</div>
+        </div>
       </div>
-      <div className="flex gap-4 ml-4">
+      <div className="ml-2 flex gap-1.5">
         {links.map((l) => (
           <Link
             key={l.to}
             to={l.to}
             className={clsx(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition',
+              'flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition',
               loc.pathname === l.to
-                ? 'bg-blue-700 text-white'
-                : 'text-blue-200 hover:bg-blue-800'
+                ? 'subtab-active'
+                : 'text-ink-muted hover:bg-white/[0.03] hover:text-ink',
             )}
           >
             {l.icon}
@@ -34,8 +39,12 @@ function Nav() {
           </Link>
         ))}
       </div>
-      <div className="ml-auto text-xs text-blue-300 italic">
-        Synthetic data only · Microsoft Agents League 2026
+      <div className="ml-auto flex items-center gap-2 text-[11px] font-medium text-ink-subtle">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          Synthetic data only
+        </span>
+        <span className="hidden sm:inline">Microsoft Agents League 2026</span>
       </div>
     </nav>
   )

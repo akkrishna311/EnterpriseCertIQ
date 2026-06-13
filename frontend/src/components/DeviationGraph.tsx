@@ -26,7 +26,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function DeviationGraph({ series, title = 'Planned vs Actual Progress' }: Props) {
   if (!series || series.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 bg-gray-50 rounded border border-dashed border-gray-300 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-48 bg-white/5 rounded border border-dashed border-line-strong text-ink-subtle text-sm">
         Progress data will appear here after a workflow runs.
       </div>
     )
@@ -38,7 +38,7 @@ export default function DeviationGraph({ series, title = 'Planned vs Actual Prog
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={series} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />

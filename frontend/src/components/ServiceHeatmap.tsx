@@ -6,10 +6,10 @@ interface Props {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  strong: 'bg-green-100 text-green-800 border-green-200',
-  developing: 'bg-amber-100 text-amber-800 border-amber-200',
-  weak: 'bg-red-100 text-red-800 border-red-200',
-  unknown: 'bg-gray-100 text-gray-500 border-gray-200',
+  strong: 'bg-emerald-500/15 text-green-800 border-green-200',
+  developing: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  weak: 'bg-rose-500/15 text-red-800 border-rose-500/30',
+  unknown: 'bg-white/10 text-ink-muted border-line',
 }
 
 function ServiceChip({ cell }: { cell: ServiceCell }) {
@@ -27,7 +27,7 @@ function ServiceChip({ cell }: { cell: ServiceCell }) {
 export default function ServiceHeatmap({ domains }: Props) {
   if (!domains || domains.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 bg-gray-50 rounded border border-dashed border-gray-300 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-32 bg-white/5 rounded border border-dashed border-line-strong text-ink-subtle text-sm">
         Service heatmap will appear after assessment data is available.
       </div>
     )
@@ -43,14 +43,14 @@ export default function ServiceHeatmap({ domains }: Props) {
       <div className="divide-y divide-gray-100">
         {domains.map((d) => (
           <div key={d.domain_id} className="py-2">
-            <div className="text-xs font-semibold text-gray-600 mb-1.5">
-              {d.name} <span className="font-normal text-gray-400">({d.weight_pct}% of exam)</span>
+            <div className="text-xs font-semibold text-ink-muted mb-1.5">
+              {d.name} <span className="font-normal text-ink-subtle">({d.weight_pct}% of exam)</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {d.services && d.services.length > 0 ? (
                 d.services.map((cell) => <ServiceChip key={cell.service_id} cell={cell} />)
               ) : (
-                <span className="text-xs text-gray-400">No service-level data</span>
+                <span className="text-xs text-ink-subtle">No service-level data</span>
               )}
             </div>
           </div>

@@ -16,7 +16,7 @@ function barColor(pct: number): string {
 export default function DomainMasteryChart({ domains, passThreshold = 700 }: Props) {
   if (!domains || domains.length === 0) {
     return (
-      <div className="flex items-center justify-center h-40 bg-gray-50 rounded border border-dashed border-gray-300 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-40 bg-white/5 rounded border border-dashed border-line-strong text-ink-subtle text-sm">
         Domain mastery will appear after assessment data is available.
       </div>
     )
@@ -58,10 +58,10 @@ export default function DomainMasteryChart({ domains, passThreshold = 700 }: Pro
         {domains.map((d) => (
           <div key={d.domain_id} className="flex items-center gap-3 py-1.5 px-1">
             <div className="w-3 h-3 rounded-full shrink-0" style={{ background: barColor(d.mastery_pct) }} />
-            <span className="flex-1 text-gray-700 truncate">{d.name}</span>
-            <span className="text-gray-400">{d.weight_pct}%</span>
+            <span className="flex-1 text-ink truncate">{d.name}</span>
+            <span className="text-ink-subtle">{d.weight_pct}%</span>
             <span className={clsx('font-semibold w-12 text-right',
-              d.mastery_pct >= 75 ? 'text-green-600' : d.mastery_pct >= 55 ? 'text-amber-600' : 'text-red-600'
+              d.mastery_pct >= 75 ? 'text-emerald-300' : d.mastery_pct >= 55 ? 'text-amber-300' : 'text-rose-300'
             )}>{Math.round(d.mastery_pct)}%</span>
             {d.flag === 'low_evidence' && (
               <span className="text-amber-500 text-xs">⚠ low evidence</span>

@@ -14,26 +14,26 @@ export default function TrustSafetyPanel() {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center gap-2 text-indigo-700 font-semibold mb-1">
+      <div className="bg-surface-2 rounded-lg border border-line p-4">
+        <div className="flex items-center gap-2 text-violet-300 font-semibold mb-1">
           <Target size={15} /> Calibrated readiness
         </div>
-        <p className="text-2xl font-bold text-gray-900">{data.readiness_model.auc_loo}</p>
-        <p className="text-[11px] text-gray-500">LOO AUC · Brier {data.readiness_model.brier_loo} · n={data.readiness_model.n}</p>
+        <p className="text-2xl font-bold text-ink">{data.readiness_model.auc_loo}</p>
+        <p className="text-[11px] text-ink-muted">LOO AUC · Brier {data.readiness_model.brier_loo} · n={data.readiness_model.n}</p>
       </div>
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-surface-2 rounded-lg border border-line p-4">
         <div className="flex items-center gap-2 font-semibold mb-1" style={{ color: held ? '#16a34a' : '#b45309' }}>
           <ShieldCheck size={15} /> Adversarial red-team
         </div>
-        <p className="text-2xl font-bold text-gray-900">{rt.held}/{rt.total}</p>
-        <p className="text-[11px] text-gray-500">attacks held · ASR {asr}</p>
+        <p className="text-2xl font-bold text-ink">{rt.held}/{rt.total}</p>
+        <p className="text-[11px] text-ink-muted">attacks held · ASR {asr}</p>
       </div>
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center gap-2 text-gray-700 font-semibold mb-1">
+      <div className="bg-surface-2 rounded-lg border border-line p-4">
+        <div className="flex items-center gap-2 text-ink font-semibold mb-1">
           <Lock size={15} /> Content Safety
         </div>
-        <p className="text-2xl font-bold text-gray-900 capitalize">{data.content_safety}</p>
-        <p className="text-[11px] text-gray-500">{data.content_safety === 'azure' ? 'Azure AI Content Safety (live)' : 'regex fallback (set key for live)'}</p>
+        <p className="text-2xl font-bold text-ink capitalize">{data.content_safety}</p>
+        <p className="text-[11px] text-ink-muted">{data.content_safety === 'azure' ? 'Azure AI Content Safety (live)' : 'regex fallback (set key for live)'}</p>
       </div>
     </div>
   )
