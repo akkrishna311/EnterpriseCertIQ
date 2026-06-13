@@ -20,7 +20,6 @@ from backend.middleware.pipeline import redact_pii, apply_pipeline
 from backend.core.agent import BaseAgent
 from backend.core.workflow import (
     _has_red_objection,
-    _is_valid_plan_payload,
     _readiness_from_forecast,
 )
 from backend.mcp_server.server import (
@@ -82,14 +81,6 @@ def test_has_red_objection_true():
 def test_has_red_objection_false():
     assert _has_red_objection({"objections": [{"severity": "amber"}]}) is False
 
-
-def test_is_valid_plan_payload():
-    valid = {
-        "plan_id": "p", "learner_id": "L", "cert_id": "AZ-204",
-        "created_at": "x", "deadline": "y", "total_planned_hours": 10, "weeks": [],
-    }
-    assert _is_valid_plan_payload(valid) is True
-    assert _is_valid_plan_payload({"plan_id": "p"}) is False
 
 
 # ── Assessment generation + scoring ──────────────────────────────────────────

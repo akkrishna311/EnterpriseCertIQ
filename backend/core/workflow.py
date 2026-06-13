@@ -56,27 +56,28 @@ def _has_red_objection(payload) -> bool:
     return '"severity": "red"' in str(payload)
 
 
-def _is_valid_plan_payload(payload) -> bool:
-    return isinstance(payload, dict) and {
-        "plan_id",
-        "learner_id",
-        "cert_id",
-        "created_at",
-        "deadline",
-        "total_planned_hours",
-        "weeks",
-    }.issubset(payload.keys())
+def _effective_hours_per_week(wiq) -> float:
+    """Derive usable study hours from Work IQ signals.
+
+    available_study_hours_per_week is often 0 (default/unset). When it is,
+    fall back to half the learner's focus window — a conservative but realistic
+    estimate derived from real calendar data.
+    """
+    declared = float(getattr(wiq, "available_study_hours_per_week", 0) or 0)
+    focus = float(getattr(wiq, "focus_hours_per_week", 0) or 0)
+    return max(declared, focus / 2, 2.0)
 
 
 async def _canonicalize_plan_payload(learner: LearnerProfile, curated_topics, candidate_payload):
-    if _is_valid_plan_payload(candidate_payload):
-        return candidate_payload, False
-
+    # Always run through generate_study_plan.fn() — the agent often returns a
+    # plan directly as text (bypassing the MCP tool), producing wrong hours.
+    # Calling the canonical tool ensures LRA per-week allocation every time.
+    hours = _effective_hours_per_week(learner.work_iq_signals)
     canonical_plan = await generate_study_plan.fn(StudyPlanInput(
         learner_id=learner.learner_id,
         cert_id=learner.cert_target,
         curated_topics_json=json.dumps(curated_topics),
-        available_hours_per_week=learner.work_iq_signals.available_study_hours_per_week,
+        available_hours_per_week=hours,
         deadline=learner.deadline,
     ))
     return canonical_plan, True
@@ -233,6 +234,19 @@ class WorkflowOrchestrator:
                 context=base_ctx,
             )
             ctx.set_output("intake", intake_result)
+
+            # ── Work IQ signals surface ──────────────────────────────────────
+            wiq = learner.work_iq_signals
+            emit(make_event(TraceEventType.TOOL_RESULT, "intake", {
+                "tool": "work_iq",
+                "label": "Work IQ signals detected",
+                "meeting_hours_per_week": getattr(wiq, "meeting_hours_per_week", 0),
+                "focus_hours_per_week": getattr(wiq, "focus_hours_per_week", 0),
+                "preferred_learning_slot": getattr(wiq, "preferred_learning_slot", ""),
+                "upcoming_milestones": getattr(wiq, "upcoming_milestones", []),
+                "effective_study_hours_per_week": round(_effective_hours_per_week(wiq), 1),
+                "source": "microsoft_graph" if getattr(wiq, "source", "") == "graph" else "synthetic",
+            }))
 
             # ── Stage 2: Learning Path Curator ──────────────────────────────
             _curator_messages = [{
