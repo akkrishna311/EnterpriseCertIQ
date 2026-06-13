@@ -95,25 +95,20 @@ export default function LearnerView() {
     enabled: !!learner,
   })
 
+  // URL → state: only fires when the URL actually changes (e.g. browser back/forward).
+  // React deduplicates setState so setting the same value never causes a re-render.
   useEffect(() => {
     const learnerParam = searchParams.get('learner')
     const tabParam = searchParams.get('tab') as TabKey | null
-    if (learnerParam && learnerParam !== selectedLearner) {
-      setSelectedLearner(learnerParam)
-    }
-    if (tabParam && TABS.some((tab) => tab.key === tabParam) && tabParam !== activeTab) {
-      setActiveTab(tabParam)
-    }
-  }, [activeTab, searchParams, selectedLearner])
+    if (learnerParam) setSelectedLearner(learnerParam)
+    if (tabParam && TABS.some((tab) => tab.key === tabParam)) setActiveTab(tabParam)
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // State → URL: only fires when state changes. No searchParams dep — avoids the loop
+  // where setSearchParams triggers searchParams change which re-fires this effect.
   useEffect(() => {
-    const next = new URLSearchParams(searchParams)
-    next.set('learner', selectedLearner)
-    next.set('tab', activeTab)
-    if (searchParams.toString() !== next.toString()) {
-      setSearchParams(next, { replace: true })
-    }
-  }, [activeTab, searchParams, selectedLearner, setSearchParams])
+    setSearchParams({ learner: selectedLearner, tab: activeTab }, { replace: true })
+  }, [activeTab, selectedLearner, setSearchParams])
 
   async function handleRun() {
     if (!learner) return
