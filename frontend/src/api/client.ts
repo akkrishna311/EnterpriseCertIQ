@@ -50,6 +50,7 @@ export const api = {
   approvePlan: (plan_id: string) => postJSON('/plans/approve', { plan_id, approved_by: 'manager' }),
   listPlans: (lid: string) => fetchJSON<DraftPlan[]>(`/plans/${lid}`),
   getPlan: (planId: string) => fetchJSON<DraftPlan>(`/plan/${planId}`),
+  getTrace: (runId: string) => fetchJSON<{ run_id: string; events: TraceEvent[] }>(`/workflow/${runId}/trace`),
   progress: (lid: string, cid: string) => fetchJSON<ProgressSnapshot>(`/progress/${lid}/${cid}`),
   mastery: (lid: string, cid: string) => fetchJSON<MasteryGrid>(`/mastery/${lid}/${cid}`),
   forecast: (lid: string, cid: string) => fetchJSON<Forecast>(`/forecast/${lid}/${cid}`),

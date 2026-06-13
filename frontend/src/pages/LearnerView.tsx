@@ -57,7 +57,7 @@ const DIFF_BADGE: Record<string, string> = {
 export default function LearnerView() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedLearner, setSelectedLearner] = useState(searchParams.get('learner') ?? 'L-1004')
-  const [runId, setRunId] = useState<string>()
+  const [runId, setRunId] = useState<string | undefined>(searchParams.get('runId') ?? undefined)
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState<TraceEvent[]>([])
   const [activeTab, setActiveTab] = useState<TabKey>((searchParams.get('tab') as TabKey) ?? 'reasoning')
@@ -96,22 +96,24 @@ export default function LearnerView() {
   })
 
   // URL → state: only fires when the URL actually changes (e.g. browser back/forward).
-  // React deduplicates setState so setting the same value never causes a re-render.
   useEffect(() => {
     const learnerParam = searchParams.get('learner')
     const tabParam = searchParams.get('tab') as TabKey | null
     const planIdParam = searchParams.get('planId') ?? undefined
+    const runIdParam = searchParams.get('runId') ?? undefined
     if (learnerParam) setSelectedLearner(learnerParam)
     if (tabParam && TABS.some((tab) => tab.key === tabParam)) setActiveTab(tabParam)
     if (planIdParam) setPlanId(planIdParam)
+    if (runIdParam) setRunId(runIdParam)
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // State → URL: persist learner, tab, and planId so navigation away and back restores state.
+  // State → URL: persist learner, tab, planId and runId so navigation away and back restores state.
   useEffect(() => {
     const params: Record<string, string> = { learner: selectedLearner, tab: activeTab }
     if (planId) params.planId = planId
+    if (runId) params.runId = runId
     setSearchParams(params, { replace: true })
-  }, [activeTab, selectedLearner, planId, setSearchParams])
+  }, [activeTab, selectedLearner, planId, runId, setSearchParams])
 
   // Restore plan from backend when planId is in the URL but planData is not loaded.
   useEffect(() => {
@@ -125,6 +127,14 @@ export default function LearnerView() {
       if ((plan as any).status === 'approved') setPlanApproved(true)
     }).catch(() => setPlanId(undefined))
   }, [planId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restore trace events from backend when runId is in URL but events haven't been loaded yet.
+  useEffect(() => {
+    if (!runId || events.length > 0) return
+    api.getTrace(runId).then((trace) => {
+      if (trace.events?.length) setEvents(trace.events)
+    }).catch(() => { /* trace not ready yet — ignore */ })
+  }, [runId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRun() {
     if (!learner) return
@@ -328,8 +338,8 @@ export default function LearnerView() {
             value={selectedLearner}
             onChange={(e) => {
               setSelectedLearner(e.target.value)
-              setEvents([]); setRunId(undefined); setPlanData(undefined)
-              setPlanId(undefined); setPlanApproved(false); setObjections([])
+              setEvents([]); setRunId(undefined); setPlanId(undefined); setPlanData(undefined)
+              setPlanApproved(false); setObjections([])
               setProgressSeries([]); setAssessment(null); setExamResult(null); setReadiness(undefined)
               setActionError(undefined); setAnswers({})
             }}

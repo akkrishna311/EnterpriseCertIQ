@@ -374,10 +374,15 @@ export default function ManagerView() {
   const runWhatIf = useMutation<ManagerWhatIfResult, Error, ManagerWhatIfRequest>({
     mutationFn: (payload) => api.managerWhatIf(selectedTeam, payload),
   })
+  const [approveError, setApproveError] = useState<string | null>(null)
   const approvePlan = useMutation({
     mutationFn: (planId: string) => api.approvePlan(planId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['plans'] })
+      setApproveError(null)
+      await queryClient.refetchQueries({ queryKey: ['plans'] })
+    },
+    onError: (err: Error) => {
+      setApproveError(err.message)
     },
   })
 
@@ -708,21 +713,26 @@ export default function ManagerView() {
                   <span>{plan.weeks?.length ?? 0} weeks</span>
                   {plan.deadline && <span>Deadline: {plan.deadline}</span>}
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => approvePlan.mutate(plan.plan_id)}
-                    disabled={approvePlan.isPending}
-                    className="text-xs px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60 font-medium"
-                  >
-                    {approvePlan.isPending ? 'Approving…' : '✓ Approve & Publish'}
-                  </button>
-                  <Link
-                    to={`/?learner=${plan.learner.learner_id}&tab=plan`}
-                    className="text-xs px-3 py-1.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-100 font-medium"
-                  >
-                    Review Plan
-                  </Link>
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => approvePlan.mutate(plan.plan_id)}
+                      disabled={approvePlan.isPending}
+                      className="text-xs px-3 py-1.5 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60 font-medium"
+                    >
+                      {approvePlan.isPending ? 'Approving…' : '✓ Approve & Publish'}
+                    </button>
+                    <Link
+                      to={`/?learner=${plan.learner.learner_id}&tab=plan&planId=${plan.plan_id}`}
+                      className="text-xs px-3 py-1.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-100 font-medium"
+                    >
+                      Review Plan
+                    </Link>
+                  </div>
+                  {approveError && (
+                    <p className="text-xs text-rose-600">{approveError}</p>
+                  )}
                 </div>
               </div>
             ))}
