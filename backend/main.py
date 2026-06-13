@@ -857,6 +857,15 @@ async def get_trace(run_id: str):
     return trace
 
 
+@app.get("/api/plan/{plan_id}")
+async def get_plan_by_id(plan_id: str):
+    """Fetch a single plan by ID — used by the frontend to restore state after navigation."""
+    plan = await storage.get_plan(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return plan
+
+
 @app.get("/api/plans/{learner_id}")
 async def get_plans(learner_id: str):
     return await storage.list_plans(learner_id)

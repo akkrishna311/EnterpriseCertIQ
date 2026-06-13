@@ -350,8 +350,9 @@ async def generate_study_plan(args: StudyPlanInput) -> dict:
         })
 
     plan_id = f"plan_{args.learner_id}_{args.cert_id}_{str(uuid.uuid4())[:8]}"
-    return {
+    plan = {
         "plan_id": plan_id,
+        "id": plan_id,
         "learner_id": args.learner_id,
         "cert_id": args.cert_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -366,6 +367,9 @@ async def generate_study_plan(args: StudyPlanInput) -> dict:
         "ai_disclosure": "AI-generated; review before publishing",
         "requires_approval": True,
     }
+    from backend.storage.store import get_storage as _get_storage
+    await _get_storage().save_plan(plan)
+    return plan
 
 
 @mcp.tool()

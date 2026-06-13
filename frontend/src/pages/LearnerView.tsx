@@ -61,7 +61,7 @@ export default function LearnerView() {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState<TraceEvent[]>([])
   const [activeTab, setActiveTab] = useState<TabKey>((searchParams.get('tab') as TabKey) ?? 'reasoning')
-  const [planId, setPlanId] = useState<string>()
+  const [planId, setPlanId] = useState<string | undefined>(searchParams.get('planId') ?? undefined)
   const [planData, setPlanData] = useState<StudyPlan>()
   const [planApproved, setPlanApproved] = useState(false)
   const [objections, setObjections] = useState<any[]>([])
@@ -100,15 +100,31 @@ export default function LearnerView() {
   useEffect(() => {
     const learnerParam = searchParams.get('learner')
     const tabParam = searchParams.get('tab') as TabKey | null
+    const planIdParam = searchParams.get('planId') ?? undefined
     if (learnerParam) setSelectedLearner(learnerParam)
     if (tabParam && TABS.some((tab) => tab.key === tabParam)) setActiveTab(tabParam)
+    if (planIdParam) setPlanId(planIdParam)
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // State → URL: only fires when state changes. No searchParams dep — avoids the loop
-  // where setSearchParams triggers searchParams change which re-fires this effect.
+  // State → URL: persist learner, tab, and planId so navigation away and back restores state.
   useEffect(() => {
-    setSearchParams({ learner: selectedLearner, tab: activeTab }, { replace: true })
-  }, [activeTab, selectedLearner, setSearchParams])
+    const params: Record<string, string> = { learner: selectedLearner, tab: activeTab }
+    if (planId) params.planId = planId
+    setSearchParams(params, { replace: true })
+  }, [activeTab, selectedLearner, planId, setSearchParams])
+
+  // Restore plan from backend when planId is in the URL but planData is not loaded.
+  useEffect(() => {
+    if (!planId || planData) return
+    api.getPlan(planId).then((plan) => {
+      if ((plan as any).learner_id !== selectedLearner) {
+        setPlanId(undefined)
+        return
+      }
+      setPlanData(plan as unknown as StudyPlan)
+      if ((plan as any).status === 'approved') setPlanApproved(true)
+    }).catch(() => setPlanId(undefined))
+  }, [planId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRun() {
     if (!learner) return
