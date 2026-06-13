@@ -305,37 +305,49 @@ async def generate_study_plan(args: StudyPlanInput) -> dict:
     """
     try:
         topics = json.loads(args.curated_topics_json)
+        if not isinstance(topics, list):
+            topics = []
     except Exception:
-        topics = [{"title": "Foundations", "domain": "General", "hours": 3}]
+        topics = []
 
     topic_pool = _normalize_curated_topics(topics)
     if not topic_pool:
+        # Fallback: one topic per cert domain so weeks fill evenly
         topic_pool = _normalize_curated_topics([
-            {"title": "Foundations", "domain": "General", "hours": 3}
+            {"title": "Core Concepts & Foundations", "domain": "General", "hours": 2},
+            {"title": "Compute & Hosting", "domain": "Compute", "hours": 2},
+            {"title": "Networking & Connectivity", "domain": "Networking", "hours": 2},
+            {"title": "Storage & Data Management", "domain": "Storage", "hours": 2},
+            {"title": "Security & Identity", "domain": "Security", "hours": 2},
+            {"title": "Monitoring & Optimisation", "domain": "Monitoring", "hours": 2},
         ])
 
     hours_per_week = max(args.available_hours_per_week, 2.0)
-    total_budget = hours_per_week * args.weeks
-    # Largest Remainder Algorithm: redistribute topic hours within the total budget
-    # so no topic is starved to 0h by rounding. Each topic guaranteed >= 0.5h.
-    topic_pool = _lra_allocate_hours(topic_pool, total_budget)
+    n_weeks = max(args.weeks, 1)
+    topics_per_week = max(1, math.ceil(len(topic_pool) / n_weeks))
 
+    # Slice topics into weekly buckets first, then run LRA *within each week*
+    # so every topic's hours_allocated reflects what the learner does that week —
+    # not a share of the total multi-week budget (which inflates the badge).
     weeks = []
     cumulative = 0
-    topics_per_week = max(1, math.ceil(len(topic_pool) / max(args.weeks, 1)))
+    remaining = list(topic_pool)
 
-    for w in range(1, args.weeks + 1):
-        week_topics = topic_pool[:topics_per_week]
-        week_hours = min(hours_per_week, sum(t.get("hours_allocated", 2) for t in week_topics))
-        cumulative += len(week_topics)
+    for w in range(1, n_weeks + 1):
+        week_slice = remaining[:topics_per_week]
+        remaining = remaining[topics_per_week:]
+
+        # LRA distributes this week's hours across its topics (guaranteed >= 0.5h each).
+        week_slice = _lra_allocate_hours(week_slice, hours_per_week)
+        week_hours = round(sum(t["hours_allocated"] for t in week_slice), 1)
+        cumulative += len(week_slice)
         weeks.append({
             "week": w,
-            "topics": week_topics,
-            "planned_hours": round(week_hours, 1),
+            "topics": week_slice,
+            "planned_hours": week_hours,
             "cumulative_planned_topics": cumulative,
             "notes": "",
         })
-        topic_pool = topic_pool[len(week_topics):]
 
     plan_id = f"plan_{args.learner_id}_{args.cert_id}_{str(uuid.uuid4())[:8]}"
     return {
