@@ -28,12 +28,27 @@ Usage:
 from __future__ import annotations
 
 import logging
+import random
 from contextlib import contextmanager
 from typing import Generator, Optional
 
 logger = logging.getLogger(__name__)
 
 _tracer = None
+
+
+def _run_id_to_trace_id(run_id: str) -> Optional[int]:
+    """A run_id is a UUID (128 bits) = a valid W3C trace-id. Strip dashes and
+    parse as a 128-bit int so the App Insights operation_Id equals the UI run_id.
+    Returns None if run_id isn't a 32-hex-char UUID."""
+    hex_id = (run_id or "").replace("-", "")
+    if len(hex_id) != 32:
+        return None
+    try:
+        value = int(hex_id, 16)
+        return value if value != 0 else None
+    except ValueError:
+        return None
 
 
 def setup_telemetry() -> None:
@@ -120,12 +135,36 @@ def agent_span(
 
 @contextmanager
 def workflow_span(run_id: str, learner_id: str, cert: str) -> Generator:
-    """Top-level workflow span — wraps the entire 6-agent pipeline."""
+    """Top-level workflow span — wraps the entire agent pipeline.
+
+    Roots the trace at the UI run_id so App Insights operation_Id == run_id
+    (dashes stripped). All child agent/model/tool spans inherit this trace-id,
+    so judges can paste the Live Journey Trace id straight into Transaction Search.
+    """
     tracer = _tracer
     if tracer is None:
         yield None
         return
-    with tracer.start_as_current_span("workflow.run") as s:
+
+    parent_context = None
+    trace_id = _run_id_to_trace_id(run_id)
+    if trace_id is not None:
+        try:
+            from opentelemetry.trace import (
+                SpanContext, TraceFlags, NonRecordingSpan, set_span_in_context,
+            )
+            seeded = SpanContext(
+                trace_id=trace_id,
+                span_id=random.getrandbits(64),
+                is_remote=True,
+                trace_flags=TraceFlags(TraceFlags.SAMPLED),
+            )
+            parent_context = set_span_in_context(NonRecordingSpan(seeded))
+        except Exception as e:  # pragma: no cover - never block on telemetry
+            logger.debug("Telemetry: could not seed trace-id from run_id: %s", e)
+            parent_context = None
+
+    with tracer.start_as_current_span("workflow.run", context=parent_context) as s:
         s.set_attribute("run_id", run_id)
         s.set_attribute("learner_id", learner_id)
         s.set_attribute("cert_id", cert)
