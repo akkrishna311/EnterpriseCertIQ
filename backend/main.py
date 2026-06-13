@@ -1516,22 +1516,34 @@ async def get_groundedness_eval(run_id: str):
     if not trace:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
-    # Collect agent output text from the trace events
+    # Collect curator and critic outputs — the most citation-heavy agents
+    citation_agents = {"curator", "readiness_critic"}
     outputs: list[str] = []
     for evt in (trace.get("events") or []):
         if not isinstance(evt, dict):
             continue
+        if evt.get("agent_name") not in citation_agents:
+            continue
         data = evt.get("data") or {}
-        # Pull curator and critic text — the most citation-heavy agents
-        if evt.get("event_type") in ("tool_result", "agent_output"):
-            result = data.get("result") or data.get("output") or ""
+        if evt.get("event_type") in ("tool_result", "agent_complete", "agent_output"):
+            result = data.get("result") or data.get("structured_output") or data.get("output") or ""
             text = json.dumps(result) if isinstance(result, (dict, list)) else str(result)
-            if text:
-                outputs.append(text)
+            if text and len(text) > 10:
+                outputs.append(text[:2000])  # cap per-agent to keep context manageable
 
-    combined = " ".join(outputs) if outputs else json.dumps(trace)
+    combined = " ".join(outputs) if outputs else json.dumps(trace)[:4000]
     model_config = get_eval_model_config()
-    result = await evaluate_async(combined, model_config=model_config)
+
+    import asyncio as _asyncio
+    try:
+        result = await _asyncio.wait_for(
+            evaluate_async(combined, model_config=model_config),
+            timeout=25.0,
+        )
+    except _asyncio.TimeoutError:
+        from backend.evals.groundedness import _heuristic_evaluate
+        result = _heuristic_evaluate(combined, threshold=0.90)
+        result.evaluator = "heuristic_timeout_fallback"
 
     return {
         "run_id": run_id,
@@ -1544,7 +1556,7 @@ async def get_groundedness_eval(run_id: str):
         "note": (
             "Evaluated using Azure AI Evaluation SDK (LLM judge)"
             if result.evaluator == "azure_ai_evaluation"
-            else "Evaluated using heuristic citation-coverage score (configure MODEL_BACKEND=azure_foundry to enable LLM judge)"
+            else "Evaluated using heuristic citation-coverage score (LLM judge timed out or not configured)"
         ),
     }
 
@@ -1576,8 +1588,16 @@ async def get_rubric_eval(run_id: str):
         if not isinstance(evt, dict):
             continue
         agent = evt.get("agent_name", "")
-        if agent in agent_map and evt.get("event_type") in ("tool_result", "agent_output"):
-            samples.setdefault(agent_map[agent], evt.get("data", {}).get("result"))
+        if agent not in agent_map:
+            continue
+        event_type = evt.get("event_type", "")
+        if event_type not in ("tool_result", "agent_complete", "agent_output"):
+            continue
+        data = evt.get("data", {})
+        # agent_complete events carry structured_output; tool_result events carry result
+        payload = data.get("result") or data.get("structured_output")
+        if payload is not None:
+            samples.setdefault(agent_map[agent], payload)
 
     return batch_evaluate({k: v for k, v in samples.items() if v is not None})
 
