@@ -246,6 +246,7 @@ export interface AssessmentResult {
   estimated_exam_score: number
   pass_threshold: number
   passed: boolean
+  booking_verdict?: 'GO' | 'CONDITIONAL_GO' | 'NOT_YET'
   forecast?: Forecast
   ai_disclosure: string
 }
@@ -270,6 +271,13 @@ export interface TeamInsights {
   peer_learning_pairs: PeerLearningPair[]
   manager_actions: string[]
   members: MemberContext[]
+  roi_summary?: {
+    at_risk_headcount: number
+    cert: string
+    cert_market_value_uplift_usd: number
+    monthly_delay_cost_usd: number
+    narrative: string
+  }
   ai_disclosure: string
 }
 

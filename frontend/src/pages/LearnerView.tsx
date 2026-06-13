@@ -699,7 +699,26 @@ export default function LearnerView() {
               )}
               {examResult && (
                 <div className="bg-surface-2 border rounded-lg p-6 space-y-3">
-                  <h3 className="font-semibold text-lg">Assessment Result</h3>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-lg">Assessment Result</h3>
+                    {examResult.booking_verdict && (() => {
+                      const v = examResult.booking_verdict
+                      const style = v === 'GO'
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                        : v === 'CONDITIONAL_GO'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                          : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                      const label = v === 'GO' ? 'GO — book the exam'
+                        : v === 'CONDITIONAL_GO' ? 'CONDITIONAL GO — close, keep prepping'
+                        : 'NOT YET — keep preparing'
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${style}`}>
+                          <span className="text-[13px]">{v === 'GO' ? '✓' : v === 'CONDITIONAL_GO' ? '◐' : '✗'}</span>
+                          {label}
+                        </span>
+                      )
+                    })()}
+                  </div>
                   <div className={`text-3xl font-bold ${examResult.passed ? 'text-emerald-300' : 'text-rose-400'}`}>
                     {examResult.passed ? '✓ PASS' : '✗ FAIL'}
                   </div>

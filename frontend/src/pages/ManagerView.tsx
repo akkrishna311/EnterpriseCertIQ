@@ -793,6 +793,23 @@ export default function ManagerView() {
                 <span className="rounded-full bg-white/10 px-2.5 py-1 font-medium text-ink-muted">Insufficient evidence {insights.readiness_distribution.insufficient_evidence ?? 0}</span>
               </div>
             </div>
+            {insights.roi_summary && (
+              <div className="flex flex-wrap items-center gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
+                <div className="shrink-0">
+                  <p className="eyebrow text-emerald-300/80">ROI · Cost of delay</p>
+                  <p className="text-2xl font-bold text-emerald-300">
+                    ${insights.roi_summary.monthly_delay_cost_usd.toLocaleString()}<span className="text-sm font-medium text-ink-muted">/mo</span>
+                  </p>
+                </div>
+                <div className="h-10 w-px bg-line-strong" />
+                <div className="min-w-0 flex-1 text-xs text-ink-muted">
+                  <p>{insights.roi_summary.narrative}</p>
+                  <p className="mt-1 text-ink-subtle">
+                    {insights.roi_summary.at_risk_headcount} at-risk · {insights.roi_summary.cert} uplift ${insights.roi_summary.cert_market_value_uplift_usd.toLocaleString()}/yr
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-ink-subtle mb-2">Manager actions</p>
