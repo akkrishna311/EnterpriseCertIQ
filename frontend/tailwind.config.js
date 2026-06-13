@@ -31,6 +31,11 @@ export default {
           2: 'var(--accent-2)',
         },
       },
+      borderColor: {
+        // Bare `border` (no color class) defaults to this instead of light gray-200,
+        // so every panel/button border is the subtle dark line across all pages.
+        DEFAULT: 'var(--line)',
+      },
       boxShadow: {
         glow: '0 18px 50px -24px var(--accent-glow)',
       },

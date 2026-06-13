@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from backend.agents.factory import build_agents
 from backend.core.telemetry import setup_telemetry
 from backend.core.workflow import WorkflowOrchestrator
-from backend.models.learner import LearnerProfile
+from backend.models.learner import LearnerProfile, PriorAttempt
 from backend.models.trace import TraceEvent, TraceEventType
 from backend.storage.store import get_storage
 from config.settings import get_settings
@@ -744,6 +744,30 @@ async def run_workflow(req: RunWorkflowRequest):
     learner = _load_learner(req.learner_id)
     if req.cert_target:
         learner.cert_target = req.cert_target
+
+    # Treat failed in-session mock exams as prior failures so the Retrospective
+    # agent runs. The seed profile only carries historical attempts; a learner who
+    # has bombed a mock in-app (e.g. 35%) should still get a postmortem.
+    try:
+        _attempts = await storage.list_assessments(req.learner_id, learner.cert_target)
+        _failed = [
+            a for a in _attempts
+            if a.get("submitted_at") and not a.get("passed", False)
+        ]
+        _failed.sort(key=lambda a: a.get("submitted_at", ""))
+        _existing_dates = {pa.date for pa in learner.prior_attempts}
+        for a in _failed[-2:]:  # most recent couple of failures
+            date = (a.get("submitted_at") or "")[:10]
+            if date and date not in _existing_dates:
+                learner.prior_attempts.append(PriorAttempt(
+                    date=date,
+                    score=a.get("estimated_exam_score"),
+                    outcome="Fail",
+                    weak_areas=[],
+                ))
+                _existing_dates.add(date)
+    except Exception:
+        pass  # never block a workflow run on attempt enrichment
 
     run_id = str(uuid.uuid4())
     q: asyncio.Queue = asyncio.Queue(maxsize=200)
