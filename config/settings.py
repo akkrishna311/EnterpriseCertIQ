@@ -5,7 +5,7 @@ from enum import Enum
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -169,6 +169,23 @@ class Settings(BaseSettings):
     azure_content_safety_endpoint: str = ""
     azure_content_safety_key: str = ""
     azure_content_safety_threshold: int = 2  # 0..6 (Azure severity scale)
+
+    # ── Hosted agent env var aliases ──────────────────────────────────
+    # The Foundry platform reserves ALL FOUNDRY_* and AGENT_* prefixes, so
+    # deploy_hosted_agent.py injects these as ECIQ_* instead.  Accept both so
+    # local .env.local (FOUNDRY_*) and the hosted container (ECIQ_*) work.
+    @model_validator(mode="after")
+    def _apply_eciq_overrides(self) -> "Settings":
+        eciq_endpoint = os.environ.get("ECIQ_IQ_ENDPOINT")
+        if eciq_endpoint:
+            self.foundry_iq_endpoint = eciq_endpoint
+        eciq_index = os.environ.get("ECIQ_IQ_INDEX_NAME")
+        if eciq_index:
+            self.foundry_iq_index_name = eciq_index
+        eciq_responses = os.environ.get("ECIQ_USE_RESPONSES_API")
+        if eciq_responses is not None:
+            self.foundry_use_responses_api = eciq_responses.lower() in ("true", "1", "yes")
+        return self
 
     # ── Derived helpers ───────────────────────────────────────────────
     @computed_field

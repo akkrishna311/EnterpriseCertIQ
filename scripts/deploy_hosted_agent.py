@@ -43,8 +43,8 @@ AGENT_ENV_VARS = {
     "MODEL_BACKEND":               "azure_foundry",
     "AZURE_AI_PROJECT_ENDPOINT":   PROJECT_ENDPOINT,
     "AZURE_AI_MODEL_DEPLOYMENT":   "gpt-4.1",
-    "FOUNDRY_USE_RESPONSES_API":   "true",
-    "FOUNDRY_IQ_INDEX_NAME":       "cert-knowledge-base",
+    "ECIQ_USE_RESPONSES_API":      "true",
+    "ECIQ_IQ_INDEX_NAME":          "cert-knowledge-base",
     "ENABLE_TELEMETRY":            "true",
     "STORAGE_BACKEND":             "local",
     "LOG_LEVEL":                   "INFO",
@@ -52,7 +52,7 @@ AGENT_ENV_VARS = {
     # Create connections in portal: Project → Settings → Connected resources
     "AZURE_OPENAI_ENDPOINT":
         "${{connections.foundry.target}}",
-    "FOUNDRY_IQ_ENDPOINT":
+    "ECIQ_IQ_ENDPOINT":
         "${{connections.kb-knowledgebase820-mbs9o.target}}",
     "AZURE_SEARCH_KEY":
         "${{connections.kb-knowledgebase820-mbs9o.credentials.key}}",
