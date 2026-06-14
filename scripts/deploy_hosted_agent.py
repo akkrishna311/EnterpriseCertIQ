@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-PROJECT_ENDPOINT = "https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc"
+PROJECT_ENDPOINT = "https://agenticaihub6393130714.services.ai.azure.com/api/projects/enterprisecertiq"
 AGENT_NAME       = "eciq-orchestrator"
 ACR_IMAGE        = "eciqregistry.azurecr.io/enterprisecertiq-hosted:latest"
 ACR_NAME         = "eciqregistry"
@@ -39,23 +39,18 @@ SUBSCRIPTION_ID  = "8ff7c7bd-4307-430f-9775-8cfed05b3df4"
 
 # Environment variables injected into the hosted container.
 # APPLICATIONINSIGHTS_CONNECTION_STRING is injected automatically by the platform.
+# Note: no ${{connections.*}} refs here — the East US 2 project has no KB connection yet.
+# The container starts up fine; IQ falls back to local keyword search mode.
 AGENT_ENV_VARS = {
     "MODEL_BACKEND":               "azure_foundry",
     "AZURE_AI_PROJECT_ENDPOINT":   PROJECT_ENDPOINT,
     "AZURE_AI_MODEL_DEPLOYMENT":   "gpt-4.1",
-    "ECIQ_USE_RESPONSES_API":      "true",
+    "ECIQ_USE_RESPONSES_API":      "false",
+    "ECIQ_IQ_ENDPOINT":            "local",
     "ECIQ_IQ_INDEX_NAME":          "cert-knowledge-base",
-    "ENABLE_TELEMETRY":            "true",
+    "ENABLE_TELEMETRY":            "false",
     "STORAGE_BACKEND":             "local",
     "LOG_LEVEL":                   "INFO",
-    # Secrets come from Foundry project connections — resolved at sandbox start.
-    # Create connections in portal: Project → Settings → Connected resources
-    "AZURE_OPENAI_ENDPOINT":
-        "${{connections.foundry.target}}",
-    "ECIQ_IQ_ENDPOINT":
-        "${{connections.kb-knowledgebase820-mbs9o.target}}",
-    "AZURE_SEARCH_KEY":
-        "${{connections.kb-knowledgebase820-mbs9o.credentials.key}}",
 }
 
 
