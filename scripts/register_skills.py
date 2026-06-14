@@ -112,12 +112,24 @@ def _api_headers(token: str) -> dict:
     }
 
 
+_API_VERSION = "v1"
+
+def _skills_url(*path_segments: str) -> str:
+    """Build a Skills API URL: endpoint/skills[/segments]?api-version=v1."""
+    from dotenv import load_dotenv
+    import os
+    load_dotenv(".env.local")
+    endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "").rstrip("/")
+    base = f"{endpoint}/skills"
+    if path_segments:
+        base = base + "/" + "/".join(path_segments)
+    return f"{base}?api-version={_API_VERSION}"
+
+
 def _skills_base_url(endpoint: str, project_name: str) -> str:
-    """Build the Skills API base URL from the project endpoint."""
-    # endpoint format: https://<hub>.services.ai.azure.com/api/projects/<name>
-    # Skills API: https://<hub>.services.ai.azure.com/api/projects/<name>/skills
+    """Legacy shim — kept so list_skills() still works."""
     endpoint = endpoint.rstrip("/")
-    return f"{endpoint}/skills"
+    return f"{endpoint}/skills?api-version={_API_VERSION}"
 
 
 def register_skill(
@@ -138,43 +150,55 @@ def register_skill(
     description, instructions = _parse_skill_md(entry["dir"])
     if not description:
         description = entry["description"]
+    # Read the raw SKILL.md (including YAML frontmatter) — API validates the frontmatter
+    raw_skill_md = (entry["dir"] / "SKILL.md").read_text(encoding="utf-8")
 
-    base_url = _skills_base_url(endpoint, "")
-    headers = _api_headers(token)
-
-    version_payload = json.dumps({
-        "description": description,
-        "instructions": instructions,
-    }).encode("utf-8")
+    auth_headers = {"Authorization": f"Bearer {token}", "Foundry-Features": "Skills=V1Preview"}
 
     if dry_run:
-        print(f"\n[DRY RUN] Would POST to: {base_url}/{skill_name}/versions")
+        print(f"\n[DRY RUN] Would POST to: {_skills_url(skill_name, 'versions')}")
         print(f"  description: {description[:80]}...")
         print(f"  instructions: {len(instructions)} chars")
         print(f"  agents: {', '.join(entry['agents'])}")
         return True
 
-    # Step 1 — create skill version (auto-creates parent skill if needed)
-    version_url = f"{base_url}/{skill_name}/versions"
+    # Step 1 — create skill version via multipart/form-data
+    import email.mime.multipart as _mime
+    import uuid
+    version_url = _skills_url(skill_name, "versions")
     print(f"\nRegistering skill '{skill_name}'...")
     print(f"  POST {version_url}")
 
-    req = urllib.request.Request(version_url, data=version_payload, headers=headers, method="POST")
+    boundary = uuid.uuid4().hex
+    body_parts = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="SKILL.md"\r\n'
+        f"Content-Type: text/markdown\r\n\r\n"
+        f"{raw_skill_md}\r\n"
+        f"--{boundary}--\r\n"
+    )
+    multipart_data = body_parts.encode("utf-8")
+    multipart_headers = {
+        **auth_headers,
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }
+
+    req = urllib.request.Request(version_url, data=multipart_data, headers=multipart_headers, method="POST")
     try:
         with urllib.request.urlopen(req) as resp:
             body = json.loads(resp.read())
-            version_id = body.get("version_id") or body.get("id") or "1"
+            version_id = body.get("version_id") or body.get("id") or body.get("name") or "1"
             print(f"  [OK] Version created: {version_id}")
     except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"  [ERROR] {e.code}: {body[:300]}")
+        err_body = e.read().decode()
+        print(f"  [ERROR] {e.code}: {err_body[:400]}")
         return False
 
     # Step 2 — promote to default_version
-    default_url = f"{base_url}/{skill_name}/default_version"
+    default_url = _skills_url(skill_name, "default_version")
     default_payload = json.dumps({"version_id": version_id}).encode("utf-8")
     print(f"  PATCH {default_url}")
-    req2 = urllib.request.Request(default_url, data=default_payload, headers=headers, method="PATCH")
+    req2 = urllib.request.Request(default_url, data=default_payload, headers=_api_headers(token), method="PATCH")
     try:
         with urllib.request.urlopen(req2) as resp2:
             print(f"  [OK] Promoted to default_version")

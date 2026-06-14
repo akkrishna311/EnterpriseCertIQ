@@ -1,198 +1,296 @@
 """
-EnterpriseCertIQ — Register all 9 agents in Azure AI Foundry with native Foundry IQ grounding.
+EnterpriseCertIQ — Register all 9 agents in Azure AI Foundry.
 
-Run from Azure Cloud Shell (https://shell.azure.com). No 'az login' needed —
-DefaultAzureCredential picks up the portal session automatically.
+Each agent gets the correct combination of:
+  - Foundry IQ Knowledge Base (MCPTool, knowledge_base_retrieve)
+  - Fabric IQ Ontology / KB (MCPTool, fabric endpoint)
+  - Foundry Skills content injected into instructions (readiness-rubric, citation-policy, safety-escalation)
 
-Usage (Cloud Shell bash):
+Run from Azure Cloud Shell (https://shell.azure.com) or locally after `az login`.
+
+Usage:
+    python register_agents_cloud_shell.py                # register / update all 9 agents
+    python register_agents_cloud_shell.py --list-connections   # inspect project connections
+    python register_agents_cloud_shell.py --recreate     # wipe all versions first, then register
+    python register_agents_cloud_shell.py --dry-run      # print what would be sent
+
+Prerequisites (Cloud Shell):
     pip install "azure-ai-projects>=2.0.0" azure-identity --quiet
-    python register_agents_cloud_shell.py
 
-    # List your Foundry connections first to find the search connection name:
-    python register_agents_cloud_shell.py --list-connections
-
-    # Recreate agents (wipes existing versions):
-    python register_agents_cloud_shell.py --recreate
+Prerequisites (local):
+    az login
+    pip install "azure-ai-projects>=2.2.0" azure-identity
 """
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
+# Your Foundry project endpoint (Foundry portal → project → Settings → Project endpoint)
 PROJECT_ENDPOINT = "https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc"
 MODEL_DEPLOYMENT = "gpt-4.1"
-INDEX_NAME       = "cert-knowledge-base"
 
-# Foundry portal → Settings → Connections → find your Azure AI Search connection → copy its Name.
-# Run with --list-connections first if you are unsure.
-SEARCH_CONNECTION_NAME = "REPLACE_WITH_YOUR_SEARCH_CONNECTION_NAME"
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Foundry IQ Knowledge Base connections ─────────────────────────────────────
+# These are RemoteTool connections created in the portal when you added a KB to the project.
+# Connection name → MCP endpoint URL (the target of the connection)
+CERT_KB_CONNECTION   = "kb-knowledgebase820-mbs9o"
+CERT_KB_MCP_URL      = "https://iqsearchservicetest.search.windows.net/knowledgebases/knowledgebase820/mcp?api-version=2026-05-01-Preview"
 
-# Agents that get Foundry IQ (search index) attached — the ones that need grounded retrieval.
-GROUNDED_AGENTS = {
-    "eciq-learning-path-curator",
-    "eciq-assessment-agent",
-    "eciq-readiness-critic",
-}
+FABRIC_KB_CONNECTION = "kb-fabric-iq-enterpris-mbs9o"
+FABRIC_KB_MCP_URL    = "https://iqsearchservicetest.search.windows.net/knowledgebases/fabric-iq-enterprise-learning/mcp?api-version=2026-05-01-Preview"
 
+FABRIC_ONTOLOGY_CONNECTION = "EnterpriseCertIQOntology"
+FABRIC_ONTOLOGY_URL        = "https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/63fcd001-51f3-458b-bc32-920e5aa95e12/items/d0da98ba-ed92-4024-9fe9-cf6303a0d4a6/ontologyEndpoint"
+
+REPO_ROOT  = Path(__file__).parent.parent
+SKILLS_DIR = REPO_ROOT / "skills"
+
+# ── Skill content loader ──────────────────────────────────────────────────────
+def _load_skill(skill_name: str) -> str:
+    """Return the instruction body of a SKILL.md (strip YAML front matter)."""
+    md_path = SKILLS_DIR / skill_name / "SKILL.md"
+    if not md_path.exists():
+        return ""
+    text = md_path.read_text(encoding="utf-8")
+    # strip YAML front matter (--- ... ---)
+    if text.startswith("---"):
+        end = text.find("---", 3)
+        if end != -1:
+            text = text[end + 3:].lstrip()
+    return text.strip()
+
+SKILL_READINESS_RUBRIC  = _load_skill("eciq-readiness-rubric")
+SKILL_CITATION_POLICY   = _load_skill("eciq-citation-policy")
+SKILL_SAFETY_ESCALATION = _load_skill("eciq-safety-escalation")
+
+def _with_skills(base: str, *skill_bodies: str) -> str:
+    """Append Foundry Skill governance sections to an agent's base instructions."""
+    parts = [base.strip()]
+    for body in skill_bodies:
+        if body:
+            parts.append("\n\n---\n" + body)
+    return "\n".join(parts)
+
+# ── Agent definitions ─────────────────────────────────────────────────────────
+# Each dict: name, description, instructions, cert_kb, fabric_kb, fabric_ontology
 AGENTS = [
     {
         "name": "eciq-orchestrator",
         "description": "EnterpriseCertIQ multi-agent learning orchestrator.",
-        "instructions": (
+        "instructions": _with_skills(
             "You orchestrate the EnterpriseCertIQ pipeline: intake → curator → planner → "
             "critic loop → engagement → assessment → manager insights, grounded in Foundry IQ, "
-            "Work IQ, and Fabric IQ."
+            "Work IQ, and Fabric IQ.",
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": False,
+        "fabric_kb": False,
+        "fabric_ontology": False,
     },
     {
         "name": "eciq-learner-intake",
         "description": "Parses and validates the learner profile for EnterpriseCertIQ.",
-        "instructions": "You parse learner profiles and emit structured intake summaries.",
+        "instructions": _with_skills(
+            "You parse learner profiles and emit structured intake summaries "
+            "including role, certification target, domain mastery, schedule constraints, "
+            "and prior assessment history.",
+            SKILL_SAFETY_ESCALATION,
+        ),
+        "cert_kb": False,
+        "fabric_kb": False,
+        "fabric_ontology": False,
     },
     {
         "name": "eciq-learning-path-curator",
         "description": "Curates certification learning paths grounded in Foundry IQ knowledge.",
-        "instructions": (
+        "instructions": _with_skills(
             "You retrieve approved certification topics from the Foundry IQ knowledge base "
-            "and cite every recommendation. Always use the azure_ai_search tool to ground "
-            "your answers — never answer from memory alone."
+            "and cite every recommendation. Always call knowledge_base_retrieve before making "
+            "any domain-specific claim. Never answer from memory alone.",
+            SKILL_CITATION_POLICY,
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": True,
+        "fabric_kb": False,
+        "fabric_ontology": False,
     },
     {
         "name": "eciq-study-plan-generator",
-        "description": "Converts curated topics into capacity-aware weekly study schedules.",
-        "instructions": (
-            "You generate structured study plans respecting learner capacity and deadline "
-            "constraints."
+        "description": "Converts curated topics into capacity-aware weekly study schedules using Fabric IQ semantic data.",
+        "instructions": _with_skills(
+            "You generate structured study plans respecting learner capacity and deadline constraints. "
+            "Query the Fabric IQ knowledge base for domain weights, recommended hours, and role-cert "
+            "semantic mappings. Use the Largest Remainder Algorithm to allocate hours so no topic "
+            "is rounded to zero.",
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": False,
+        "fabric_kb": True,
+        "fabric_ontology": True,
     },
     {
         "name": "eciq-readiness-critic",
         "description": "Reviews study plans against Fabric IQ domain weights and raises prioritised objections.",
-        "instructions": (
-            "You critique study plans using semantic domain thresholds. Search the knowledge "
-            "base to verify skill coverage and output severity-ranked objections with citations."
+        "instructions": _with_skills(
+            "You critique study plans using semantic domain thresholds. Search the certification "
+            "knowledge base to verify skill coverage. Query Fabric IQ for domain weights and "
+            "minimum mastery requirements. Output severity-ranked objections (red/amber) with citations.",
+            SKILL_READINESS_RUBRIC,
+            SKILL_CITATION_POLICY,
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": True,
+        "fabric_kb": False,
+        "fabric_ontology": True,
     },
     {
         "name": "eciq-engagement-agent",
         "description": "Schedules study reminders using Work IQ calendar signals.",
-        "instructions": (
-            "You recommend study slots informed by meeting load and focus-time patterns. "
-            "Never auto-write to calendar."
+        "instructions": _with_skills(
+            "You recommend study slots informed by meeting load and focus-time patterns from "
+            "Work IQ signals. Adapt engagement to individual workload and focus windows. "
+            "Never auto-write to calendar. Keep recommendations privacy-conscious.",
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": False,
+        "fabric_kb": False,
+        "fabric_ontology": False,
     },
     {
         "name": "eciq-assessment-agent",
         "description": "Generates grounded practice questions and evaluates exam readiness.",
-        "instructions": (
+        "instructions": _with_skills(
             "You generate practice questions grounded in the Foundry IQ knowledge base. "
-            "Always use the azure_ai_search tool and cite the source document for each question. "
-            "Derive the readiness verdict from the calibrated forecast."
+            "Always call knowledge_base_retrieve and cite the source document for each question. "
+            "Derive the readiness verdict from the calibrated forecast. "
+            "Never fabricate scores or invent questions not supported by retrieved content.",
+            SKILL_READINESS_RUBRIC,
+            SKILL_CITATION_POLICY,
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": True,
+        "fabric_kb": False,
+        "fabric_ontology": False,
     },
     {
         "name": "eciq-manager-insights",
         "description": "Surfaces team-level certification readiness and workforce risk.",
-        "instructions": (
-            "You produce aggregate team readiness insights. Never expose individual exam scores "
-            "that could affect employment decisions."
+        "instructions": _with_skills(
+            "You produce aggregate team readiness insights informed by Fabric IQ semantic data. "
+            "Never expose individual exam scores that could affect employment decisions. "
+            "Surface team-level risk, ROI cost-of-delay, and recommended interventions.",
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": False,
+        "fabric_kb": True,
+        "fabric_ontology": True,
     },
     {
         "name": "eciq-retrospective",
         "description": "Post-mortem agent triggered after a failed exam attempt.",
-        "instructions": (
-            "You investigate why the system underperformed (retrieval, plan, engagement, or "
-            "skill gap) and recommend recovery actions."
+        "instructions": _with_skills(
+            "You investigate why the system underperformed (retrieval quality, plan gaps, "
+            "engagement, or skill gap) by querying the certification knowledge base. "
+            "Recommend concrete recovery actions with citations.",
+            SKILL_CITATION_POLICY,
+            SKILL_SAFETY_ESCALATION,
         ),
+        "cert_kb": True,
+        "fabric_kb": False,
+        "fabric_ontology": False,
     },
 ]
 
 
+# ── Tool builders ─────────────────────────────────────────────────────────────
+def _cert_kb_tool():
+    from azure.ai.projects.models import MCPTool
+    return MCPTool(
+        server_label="cert-knowledge-base",
+        server_url=CERT_KB_MCP_URL,
+        project_connection_id=CERT_KB_CONNECTION,
+        require_approval="never",
+        allowed_tools=["knowledge_base_retrieve"],
+    )
+
+def _fabric_kb_tool():
+    from azure.ai.projects.models import MCPTool
+    return MCPTool(
+        server_label="fabric-iq-learning",
+        server_url=FABRIC_KB_MCP_URL,
+        project_connection_id=FABRIC_KB_CONNECTION,
+        require_approval="never",
+        allowed_tools=["knowledge_base_retrieve"],
+    )
+
+def _fabric_ontology_tool():
+    from azure.ai.projects.models import MCPTool
+    return MCPTool(
+        server_label="fabric-iq-ontology",
+        server_url=FABRIC_ONTOLOGY_URL,
+        project_connection_id=FABRIC_ONTOLOGY_CONNECTION,
+        require_approval="never",
+    )
+
+
+# ── Registration ──────────────────────────────────────────────────────────────
 def list_connections(client) -> None:
     print("\nConnections in this Foundry project:")
-    print(f"{'Name':<40} {'Type':<30}")
-    print("-" * 72)
+    print(f"{'Name':<45} {'Type':<30}")
+    print("-" * 77)
     for conn in client.connections.list():
-        print(f"{conn.name:<40} {getattr(conn, 'connection_type', '?'):<30}")
-    print("\nSet SEARCH_CONNECTION_NAME at the top of this script to the Name of your AI Search connection.")
+        name   = getattr(conn, "name", "?")
+        ctype  = str(getattr(conn, "type", "?"))
+        target = getattr(conn, "target", "")
+        print(f"{name:<45} {ctype:<30}")
+        if target:
+            print(f"  target: {target}")
 
 
-def _build_search_tool(client):
-    """Resolve the connection ID and return an AzureAISearchTool.
-
-    VECTOR_SEMANTIC_HYBRID = vector similarity + BM25 keyword + semantic reranking.
-    This is the "Agentic Retrieval" mode — an LLM decomposes complex questions into
-    parallel subqueries and reranks results, yielding ~36% higher response quality
-    than a plain keyword search.  Requires a semantic configuration on the index
-    (set one up in Azure AI Search portal → your index → Semantic configurations).
-    """
-    from azure.ai.projects.models import (
-        AzureAISearchTool,
-        AzureAISearchToolResource,
-        AISearchIndexResource,
-        AzureAISearchQueryType,
-    )
-    conn = client.connections.get(SEARCH_CONNECTION_NAME)
-    return AzureAISearchTool(
-        azure_ai_search=AzureAISearchToolResource(
-            indexes=[
-                AISearchIndexResource(
-                    project_connection_id=conn.id,
-                    index_name=INDEX_NAME,
-                    query_type=AzureAISearchQueryType.VECTOR_SEMANTIC_HYBRID,
-                )
-            ]
-        )
-    )
-
-
-def register(recreate: bool = False) -> None:
+def register(recreate: bool = False, dry_run: bool = False) -> None:
     from azure.ai.projects import AIProjectClient
+    from azure.ai.projects.models import PromptAgentDefinition
     from azure.identity import DefaultAzureCredential
 
     print(f"Connecting to: {PROJECT_ENDPOINT}")
-    client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=DefaultAzureCredential())
+    if not dry_run:
+        client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=DefaultAzureCredential())
 
-    if SEARCH_CONNECTION_NAME == "REPLACE_WITH_YOUR_SEARCH_CONNECTION_NAME":
-        print("\n⚠  SEARCH_CONNECTION_NAME is not set.")
-        print("   Run with --list-connections to find the right name, then edit this script.\n")
-        print("   Registering agents WITHOUT Foundry IQ grounding (instructions only)...\n")
-        search_tool = None
-    else:
-        print(f"Resolving search connection: {SEARCH_CONNECTION_NAME!r}")
-        try:
-            search_tool = _build_search_tool(client)
-            print(f"  ✓  Search tool ready — index: {INDEX_NAME}\n")
-        except Exception as e:
-            print(f"  ✗  Could not resolve connection ({e}) — registering without search tool.\n")
-            search_tool = None
-
-    # Delete existing agents first if --recreate
-    if recreate:
+    if recreate and not dry_run:
         print("--recreate: removing existing agent versions...")
-        try:
-            for d in AGENTS:
-                try:
-                    client.agents.delete_agent(d["name"])
-                    print(f"  deleted {d['name']}")
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        for d in AGENTS:
+            try:
+                client.agents.delete_agent(d["name"])
+                print(f"  deleted {d['name']}")
+            except Exception:
+                pass
         print()
 
-    print(f"Registering {len(AGENTS)} agents with Foundry IQ grounding on: "
-          f"{', '.join(GROUNDED_AGENTS) if search_tool else 'none (no connection set)'})\n")
+    print(f"Registering {len(AGENTS)} agents...\n")
 
     for d in AGENTS:
-        attach_search = search_tool is not None and d["name"] in GROUNDED_AGENTS
-        tools = [search_tool] if attach_search else []
+        tools = []
+        tool_tags = []
+        if d["cert_kb"]:
+            tools.append(_cert_kb_tool())
+            tool_tags.append("Foundry IQ KB (cert)")
+        if d["fabric_kb"]:
+            tools.append(_fabric_kb_tool())
+            tool_tags.append("Foundry IQ KB (Fabric IQ)")
+        if d["fabric_ontology"]:
+            tools.append(_fabric_ontology_tool())
+            tool_tags.append("Fabric Ontology")
+
+        tag_str = "  [" + " + ".join(tool_tags) + "]" if tool_tags else ""
+
+        if dry_run:
+            print(f"  [DRY RUN]  {d['name']}{tag_str}")
+            print(f"             instructions: {len(d['instructions'])} chars")
+            continue
+
         try:
-            from azure.ai.projects.models import PromptAgentDefinition
             definition = PromptAgentDefinition(
                 kind="prompt",
                 model=MODEL_DEPLOYMENT,
@@ -205,24 +303,29 @@ def register(recreate: bool = False) -> None:
                 description=d["description"],
             )
             ver = getattr(v, "version", "?")
-            iq_tag = "  [+ Foundry IQ]" if attach_search else ""
-            print(f"  ✓  {d['name']}  (version {ver}){iq_tag}")
+            print(f"  [OK]  {d['name']}  (version {ver}){tag_str}")
         except Exception as e:
-            print(f"  ✗  {d['name']}  ERROR: {e}")
+            print(f"  [FAIL]  {d['name']}  ERROR: {e}")
 
     print(
-        "\nDone. Open the Foundry portal → your project → Agents to verify.\n"
-        "Agents with [+ Foundry IQ] will show the search index under 'Knowledge bases'.\n"
-        f"Portal: https://ai.azure.com/  (project 'aipoc')"
+        "\nDone. Open the Foundry portal to verify:\n"
+        f"  https://ai.azure.com/  (project 'aipoc')\n\n"
+        "Agents with Foundry IQ KB will show the knowledge base under 'Knowledge bases'.\n"
+        "Skill governance is embedded in each agent's instructions.\n"
+        "To attach Foundry Skills via the portal: Agents → <agent> → Skills → Add skill"
     )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Register EnterpriseCertIQ agents in Foundry with Foundry IQ.")
+    parser = argparse.ArgumentParser(
+        description="Register EnterpriseCertIQ agents in Foundry with Foundry IQ, Fabric IQ, and Skills."
+    )
     parser.add_argument("--list-connections", action="store_true",
-                        help="Print all connections in the project and exit.")
+                        help="Print all project connections and exit.")
     parser.add_argument("--recreate", action="store_true",
                         help="Delete existing agent versions before re-creating.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print what would be registered without calling the API.")
     args = parser.parse_args()
 
     try:
@@ -230,12 +333,17 @@ if __name__ == "__main__":
         ver = _m.version("azure-ai-projects")
         major = int(ver.split(".")[0])
         if major < 2:
-            print(f"⚠  azure-ai-projects {ver} detected — v2.x required for AzureAISearchTool.")
-            print("   Run: pip install 'azure-ai-projects>=2.0.0' --upgrade --quiet")
+            print(f"azure-ai-projects {ver} detected — v2.x required.")
+            print("Run: pip install 'azure-ai-projects>=2.0.0' --upgrade --quiet")
             sys.exit(1)
+        print(f"azure-ai-projects {ver}")
     except Exception:
-        print("azure-ai-projects not installed. Run:\n  pip install 'azure-ai-projects>=2.0.0' azure-identity --quiet")
+        print("azure-ai-projects not installed.")
         sys.exit(1)
+
+    if args.dry_run:
+        register(recreate=args.recreate, dry_run=True)
+        sys.exit(0)
 
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
