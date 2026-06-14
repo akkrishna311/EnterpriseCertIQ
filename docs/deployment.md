@@ -63,7 +63,7 @@ az containerapp create -g $RG -n eciq-backend \
             cs-key=<AZURE_CONTENT_SAFETY_KEY> appi=<APPINSIGHTS_CONN_STRING> \
   --env-vars \
     MODEL_BACKEND=azure_foundry \
-    AZURE_AI_PROJECT_ENDPOINT=https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc \
+    AZURE_AI_PROJECT_ENDPOINT=https://<your-hub>.services.ai.azure.com/api/projects/<your-project> \
     AZURE_AI_API_KEY=secretref:azure-key \
     AZURE_AI_MODEL_DEPLOYMENT=gpt-4o \
     AZURE_AI_REASONING_DEPLOYMENT=gpt-4o \
@@ -172,7 +172,7 @@ az containerapp job create \
   --replica-timeout 600 \
   --env-vars \
     MODEL_BACKEND=azure_foundry \
-    AZURE_AI_PROJECT_ENDPOINT=https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc \
+    AZURE_AI_PROJECT_ENDPOINT=https://<your-hub>.services.ai.azure.com/api/projects/<your-project> \
     AZURE_AI_MODEL_DEPLOYMENT=gpt-4o \
     AGENT_FALLBACK_MODE=auto \
     ENABLE_TELEMETRY=true \

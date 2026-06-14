@@ -3,14 +3,12 @@
 **Multi-agent enterprise certification learning system**
 *Microsoft Agents League 2026 · Reasoning Agents Track*
 
-**Highlights:** 9 Hosted Agents on Azure AI Foundry · all 3 IQ layers (Foundry IQ = **real Azure AI
-Search VECTOR_SEMANTIC_HYBRID**, Fabric IQ ontology + live tool, Work IQ signals) · **calibrated
-P(pass), LOO AUC ≈ 0.80** with INSUFFICIENT abstention · adversarial critic→replan loop · 3
-versioned **Foundry Skills** (behavioral governance) · **GO / CONDITIONAL_GO / NOT_YET** booking
-verdict · **Largest Remainder Algorithm** study-hour allocation · **two-host grounded learning podcast**
-coaching · what-if simulator · HITL plan approval gate · App Insights tracing + azure-ai-evaluation agent
-scorers · Azure Content Safety + **adversarial red-team 16/16 held (0% ASR)** · **90 tests** ·
-inspectable `eval/` artifacts · `azd up` one-command provisioning.
+**Highlights:** 9 Hosted Agents · Azure AI Foundry · all 3 IQ layers (Foundry IQ · Fabric IQ · Work IQ) ·
+**calibrated P(pass), LOO AUC ≈ 0.80** with INSUFFICIENT abstention · adversarial Critic → replan loop ·
+3 versioned **Foundry Skills** (behavioral governance) · **GO / CONDITIONAL_GO / NOT_YET** booking verdict ·
+**Largest Remainder Algorithm** study-hour allocation · **two-host grounded learning podcast** · what-if simulator ·
+HITL plan approval gate · App Insights tracing · Azure AI Evaluation scorers ·
+Azure Content Safety · **red-team 16/16 held (0% ASR)** · **90 tests** · `azd up` one-command provisioning.
 
 > **All data is synthetic.** No real employee names, email addresses, or organisational data.
 > Identifiers follow the pattern `L-1001`, `EMP-001`, `TEAM-A`.
@@ -29,7 +27,7 @@ on the draft to give the reviewer advisory previews at approval time.
 |---|---|
 | **Orchestrator** | Routes the session, manages multi-agent handoffs, drives the pipeline |
 | **Learner Intake** | Parses and validates learner profile + Work IQ signals |
-| **Learning Path Curator** | Retrieves cited content from Foundry IQ (VECTOR_SEMANTIC_HYBRID) + Microsoft Learn MCP |
+| **Learning Path Curator** | Retrieves cited content from Foundry IQ (vector + BM25 + semantic reranking) + Microsoft Learn MCP |
 | **Study Plan Generator** | Builds a capacity-aware weekly schedule via Largest Remainder Algorithm |
 | **Readiness Critic** | Attacks the plan; produces Fabric IQ-cited objections ranked by leverage (`domain_weight × mastery_gap`); runs a bounded 2-round replan loop; contributes evidence to the `compute_readiness_forecast` MCP tool — the actual P(pass) is computed by `readiness_model.py` (logistic regression, LOO AUC ≈ 0.80), which abstains when evidence is thin |
 | **Engagement Agent** | Schedules study slots from Work IQ signals (Progress tab); generates grounded synthetic practice exam questions weighted by domain mastery gap (Practice Exam tab); produces a cited two-host Learning Podcast targeting the weakest highest-leverage domain (Audio Briefing tab) — runs ∥ Readiness Forecast |
@@ -482,7 +480,7 @@ STORAGE_BACKEND=local
 
 ```dotenv
 MODEL_BACKEND=azure_foundry
-AZURE_AI_PROJECT_ENDPOINT=https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc
+AZURE_AI_PROJECT_ENDPOINT=https://<your-hub>.services.ai.azure.com/api/projects/<your-project>
 AZURE_AI_API_KEY=your-key
 AZURE_AI_MODEL_DEPLOYMENT=gpt-4.1
 FOUNDRY_USE_RESPONSES_API=true              # activate Foundry Hosted Agent Responses API path
@@ -756,8 +754,7 @@ enterprisecertiq/
   across topics as fair integers, preventing starvation (every topic ≥ 0.5 h).
 - **Rubric-based agent evals** (`backend/evals/agent_rubrics.py`) — per-agent quality checks
   with a 0.8 pass threshold, including booking_verdict rubric (A5). Run in CI with no credentials.
-- **PDF reports** (`backend/reports/pdf.py`) — learner readiness + manager handoff brief,
-  demo-cached for instant repeat downloads.
+- **PDF reports** — learner readiness summary + manager handoff brief, downloadable from the dashboard.
 - **Grounded learning podcast** (`backend/audio/podcast.py`) — a **two-host grounded learning
   podcast** generated *only* from approved cert content, with the transcript + citations shown
   for provenance. Deep-teaches the learner's weakest concept by default (resolved via Fabric IQ
