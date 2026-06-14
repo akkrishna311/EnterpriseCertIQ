@@ -172,7 +172,7 @@ http://localhost:8000/api/workflow/L-1004-AZ-204-latest/trace
 3. Show the **Transcript** tab — two-host dialogue grounded in the cert document, with citations
 4. If Azure Speech is configured: click play and let 10 seconds of the podcast run
 
-**Say:** *"Instead of static flashcards, the learner gets a NotebookLM-style two-host podcast that deep-teaches their weakest concept — identified by Fabric IQ. Every line is grounded in the cert knowledge base, every claim has a citation. The transcript works even without the speech key."*
+**Say:** *"Instead of static flashcards, the learner gets a two-host grounded learning podcast that deep-teaches their weakest concept — identified by Fabric IQ. Every line is grounded in the cert knowledge base, every claim has a citation. The transcript works even without the speech key."*
 
 ---
 

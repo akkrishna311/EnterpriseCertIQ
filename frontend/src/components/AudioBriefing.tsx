@@ -3,7 +3,7 @@ import { Headphones, Loader2, Quote, Sparkles } from 'lucide-react'
 import { api, type AudioTranscript, type AudioConcepts } from '../api/client'
 
 /**
- * Grounded two-host learning podcast (NotebookLM-style, but cited).
+ * Grounded two-host learning podcast.
  * Teaches the learner's WEAKEST concept by default, or any concept they pick.
  * Transcript always works; the MP3 plays when Azure Speech is configured.
  */

@@ -7,8 +7,8 @@
 Search VECTOR_SEMANTIC_HYBRID**, Fabric IQ ontology + live tool, Work IQ signals) · **calibrated
 P(pass), LOO AUC ≈ 0.80** with INSUFFICIENT abstention · adversarial critic→replan loop · 3
 versioned **Foundry Skills** (behavioral governance) · **GO / CONDITIONAL_GO / NOT_YET** booking
-verdict · **Largest Remainder Algorithm** study-hour allocation · NotebookLM-style **audio podcast**
-coaching · what-if simulator · HITL exam gate · App Insights tracing + azure-ai-evaluation agent
+verdict · **Largest Remainder Algorithm** study-hour allocation · **two-host grounded learning podcast**
+coaching · what-if simulator · HITL plan approval gate · App Insights tracing + azure-ai-evaluation agent
 scorers · Azure Content Safety + **adversarial red-team 16/16 held (0% ASR)** · **90 tests** ·
 inspectable `eval/` artifacts · `azd up` one-command provisioning.
 
@@ -31,58 +31,362 @@ on the draft to give the reviewer advisory previews at approval time.
 | **Learner Intake** | Parses and validates learner profile + Work IQ signals |
 | **Learning Path Curator** | Retrieves cited content from Foundry IQ (VECTOR_SEMANTIC_HYBRID) + Microsoft Learn MCP |
 | **Study Plan Generator** | Builds a capacity-aware weekly schedule via Largest Remainder Algorithm |
-| **Readiness Critic** | Attacks the plan, finds gaps, produces calibrated P(pass) forecast with INSUFFICIENT abstention |
-| **Engagement Agent** | Schedules reminders adapted to work patterns (runs ∥ Readiness Forecast) |
+| **Readiness Critic** | Attacks the plan; produces Fabric IQ-cited objections ranked by leverage (`domain_weight × mastery_gap`); runs a bounded 2-round replan loop; contributes evidence to the `compute_readiness_forecast` MCP tool — the actual P(pass) is computed by `readiness_model.py` (logistic regression, LOO AUC ≈ 0.80), which abstains when evidence is thin |
+| **Engagement Agent** | Schedules study slots from Work IQ signals (Progress tab); generates grounded synthetic practice exam questions weighted by domain mastery gap (Practice Exam tab); produces a cited two-host Learning Podcast targeting the weakest highest-leverage domain (Audio Briefing tab) — runs ∥ Readiness Forecast |
 | **Assessment Agent** | Generates mock exams, scores responses, issues GO / CONDITIONAL_GO / NOT_YET booking verdict |
-| **Manager Insights** | Surfaces team-level risk, ROI cost-of-delay, intervention queues, peer-learning opportunities, and handoff actions |
+| **Manager Insights** | Four sub-tabs: **Overview** (team briefing, ROI cost-of-delay, manager actions, risk areas, peer pair signals, certification momentum); **Approvals & Actions** (HITL gate — draft plans pending manager approval); **Capacity & Simulator** (counterfactual what-if simulator with explicit reasoning assumptions + capacity conflict alerts); **Peer Learning** (same-cert mentor pairings matched by domain complementarity and Work IQ availability) |
 | **Retrospective** *(conditional)* | Investigates prior failures — meta-reasoning about the system |
 
 ---
 
 ## Architecture
 
+![EnterpriseCertIQ Architecture](docs/images/architecture.png)
+
+<details>
+<summary>Text fallback — architecture tiers</summary>
+
 ```
-React Dashboard (port 5173)
-        │  REST + SSE
-        ▼
-FastAPI Backend (port 8000)
-        │
-  ┌─────┴───────────────────────────────────────┐
-  │  9-Agent Workflow (orchestrated)            │
-  │  Stage 5 Engagement ∥ Stage 6a Forecast     │  ← asyncio.gather() parallel
-  │  Middleware: PII · Citation · RAI           │
-  └─────┬──────────────┬────────────────────────┘
-        │ own MCP      │ MS Learn MCP
-        ▼              ▼
- FastMCP Server    https://learn.microsoft.com/api/mcp
- (port 8001,
-  10 typed tools)
-        │
-        ▼
- Foundry Local OpenAI-compatible endpoint
- http://localhost:5273/v1
-        │
-   [switch to Azure via MODEL_BACKEND=azure_foundry]
-        ▼
- Azure AI Foundry (gpt-4.1)
- 9 Hosted Agents · VECTOR_SEMANTIC_HYBRID search
- 3 Foundry Skills (versioned behavioral governance)
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                      REACT DASHBOARD                          ║
+  ╠═══════════════════════════════╦═══════════════════════════════╣
+  ║        Learner View           ║        Manager View           ║
+  ╠═══════════════════════════════╬═══════════════════════════════╣
+  ║  Journey Trace                ║  Overview                     ║
+  ║  Study Plan                   ║  Approvals & Actions          ║
+  ║  Plan Review                  ║  Capacity & Simulator         ║
+  ║  Progress                     ║  Peer Learning                ║
+  ║  Exam Readiness               ║                               ║
+  ║  Practice Exam                ║                               ║
+  ║  Audio Briefing               ║                               ║
+  ║  Safety & RAI                 ║                               ║
+  ╚═══════════════════════════════╩═══════════════════════════════╝
+                       REST + SSE (events persisted)
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                      FASTAPI BACKEND                          ║
+  ║     PII Redaction · Citation Gate · Safety · Bias Audit       ║
+  ╚═══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                        ORCHESTRATOR                           ║
+  ║              routes · coordinates · loop control              ║
+  ╚═══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                       AGENT PIPELINE                          ║
+  ╠══════════════════════════════════╦════════════════════════════╣
+  ║  Agent                           ║  IQ Layer / Tools          ║
+  ╠══════════════════════════════════╬════════════════════════════╣
+  ║  Learner Intake                  ║  Work IQ                   ║
+  ║  Learning Path Curator           ║  Foundry IQ · MS Learn MCP ║
+  ║  Study Plan Generator            ║  Fabric IQ (LRA + weights) ║
+  ║  Readiness Critic                ║  Fabric IQ · Own MCP       ║
+  ║    ↺ 2-round replan loop         ║  (readiness forecast ·     ║
+  ║      with Study Plan Generator   ║   domain mastery)          ║
+  ╠══════════════════════════════════╬════════════════════════════╣
+  ║  ∥  Engagement Agent             ║  Work IQ · MS Learn MCP    ║
+  ║       practice exam · podcast    ║  Own MCP · Fabric IQ       ║
+  ║       study slots                ║  Azure AI Speech (TTS)     ║
+  ║  ∥  Assessment Agent             ║  Own MCP Server            ║
+  ║       mock scoring · verdict     ║  (readiness forecast)      ║
+  ╠══════════════════════════════════╬════════════════════════════╣
+  ║  Manager Insights                ║  Work IQ · Fabric IQ       ║
+  ║    ROI · what-if · peer pairs    ║                            ║
+  ║  Retrospective  (conditional)    ║  Fabric IQ                 ║
+  ╚══════════════════════════════════╩════════════════════════════╝
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                         MCP TOOLS                             ║
+  ╠════════════════════════════════╦══════════════════════════════╣
+  ║  Own MCP Server  (10 tools)    ║  MS Learn MCP                ║
+  ╠════════════════════════════════╬══════════════════════════════╣
+  ║  compute_readiness_forecast    ║  microsoft_docs_search       ║
+  ║  compute_domain_mastery        ║  microsoft_docs_fetch        ║
+  ║  compute_service_heatmap       ║  microsoft_code_sample_      ║
+  ║  get_domain_thresholds         ║    search                    ║
+  ║  get_readiness_semantics       ║                              ║
+  ║  LRA study-hour allocator      ║                              ║
+  ╚════════════════════════════════╩══════════════════════════════╝
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                          IQ LAYERS                            ║
+  ╠═════════════════════╦═════════════════════╦═══════════════════╣
+  ║  Foundry IQ         ║  Fabric IQ          ║  Work IQ          ║
+  ╠═════════════════════╬═════════════════════╬═══════════════════╣
+  ║  Grounded cert      ║  Cert ontology      ║  Workload &       ║
+  ║  knowledge          ║  Domain weights     ║  calendar signals ║
+  ║  retrieval          ║  & thresholds       ║  Meeting hours    ║
+  ║                     ║  Readiness          ║  Focus time       ║
+  ║                     ║  semantics          ║  Study slots      ║
+  ║                     ║  Cohort benchmarks  ║                   ║
+  ╚═════════════════════╩═════════════════════╩═══════════════════╝
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║                      AZURE AI FOUNDRY                         ║
+  ║  Model serving (gpt-4.1) · 9 Hosted Agents · Agent Registry  ║
+  ║  Foundry Skills: eciq-readiness-rubric ·                      ║
+  ║    eciq-safety-escalation · eciq-citation-policy              ║
+  ╚═══════════════════════════════════════════════════════════════╝
+  ╔═══════════════════════════════╦═══════════════════════════════╗
+  ║       OBSERVABILITY           ║      EVALS & RED TEAM         ║
+  ╠═══════════════════════════════╬═══════════════════════════════╣
+  ║  Application Insights         ║  Azure AI Evaluation SDK      ║
+  ║  OpenTelemetry traces         ║  Agent Quality Rubrics        ║
+  ║  Per-call request spans       ║  Groundedness Evaluator       ║
+  ║  Azure Key Vault              ║  Red Team · 16/16 · 0% ASR    ║
+  ╚═══════════════════════════════╩═══════════════════════════════╝
 ```
 
+</details>
+
 **IQ layers** (all three integrated)
-- **Foundry IQ** — local: keyword search over `./backend/data/documents/`; Azure: Azure AI Search
-  index with **`AzureAISearchQueryType.VECTOR_SEMANTIC_HYBRID`** (vector + BM25 + semantic
-  reranking, ~36% quality improvement over keyword-only). Grounded agents: Learning Path Curator,
-  Assessment Agent, Readiness Critic.
-- **Work IQ** — synthetic meeting/focus signals from `./backend/data/synthetic/learners.json`,
-  or **real Microsoft 365 calendar via Microsoft Graph** (`WORK_IQ_SOURCE=graph`,
-  `backend/iq/work_iq_graph.py`; same `WorkContext` contract, synthetic fallback). See
-  [docs/work-iq-graph.md](docs/work-iq-graph.md).
-- **Fabric IQ** — semantic layer (`backend/iq/fabric_iq.py`): an ontology over roles,
-  certifications, weighted skill domains, thresholds, and cohort outcomes. Powers the
-  Readiness Critic (leverage-weighted objections) and Manager Insights (team skill-gap
-  meaning, cohort benchmarks, intervention effectiveness). Local: in-memory ontology over
-  the synthetic datasets; Azure: Microsoft Fabric / OneLake SQL analytics endpoint.
+- **Foundry IQ** — grounded cert knowledge retrieval (vector + BM25 + semantic reranking).
+  Grounded agents: Learning Path Curator, Assessment Agent, Readiness Critic.
+- **Work IQ** — workload and calendar signals (meeting hours, focus time, study slots). Supports
+  real Microsoft 365 calendar via Microsoft Graph (`WORK_IQ_SOURCE=graph`,
+  `backend/iq/work_iq_graph.py`; same `WorkContext` contract).
+- **Fabric IQ** — semantic ontology over roles, certifications, weighted skill domains, thresholds,
+  and cohort outcomes. Powers the Readiness Critic (leverage-weighted objections) and Manager
+  Insights (team skill-gap analysis, cohort benchmarks, intervention effectiveness).
+
+---
+
+## Reasoning Patterns
+
+EnterpriseCertIQ implements all four reasoning patterns described in the challenge criteria.
+Each pattern maps to named agents and specific code paths.
+
+### 1. Planner–Executor
+
+The **Study Plan Generator** (Planner) converts curated topics into a capacity-aware weekly
+schedule. The **Readiness Critic** (Executor) attacks that plan, finding the gaps most likely
+to cause exam failure. These roles are strictly separated: the Planner never defends its own
+plan; the Critic never generates one.
+
+When the Critic finds `red`-severity objections, the workflow routes back to the **Planner**
+for a targeted revision — not to the Critic. The separation is enforced by the workflow DAG in
+`backend/core/workflow.py`.
+
+**Plan canonicalization**: even after a replan, the workflow always runs the result through
+`generate_study_plan.fn()` (Largest Remainder Algorithm). This decouples LLM output from the
+hour-allocation algorithm — topic starvation is structurally impossible.
+
+### 2. Critic / Verifier
+
+The **Readiness Critic** is a bounded validation layer that sits between planning and the
+HITL approval gate. It does not ask "is this plan reasonable?" — it asks "where will this
+learner fail?"
+
+- Objections are weighted by `domain_weight × mastery_gap` via Fabric IQ (leverage weighting),
+  so a 10-point gap in a 30%-weight domain triggers a `red` objection before a 15-point gap
+  in a 5%-weight domain does.
+- The critic loop runs at most **2 rounds**. This bounds latency and prevents oscillation
+  without capping the quality improvement from one revision cycle.
+- If no red objections remain after round 1, the plan advances immediately. If round 2 is
+  exhausted with red objections still present, the plan advances with those objections surfaced
+  in the trace for the human reviewer to see at the HITL gate.
+- Uses the `reasoning` model role (`temperature=0.0`) to maximise deliberation on weak-spot
+  identification.
+
+### 3. Self-Reflection and Iteration
+
+The **Retrospective Agent** (Stage 8) fires **only when `learner.has_prior_failures == True`**.
+It performs meta-reasoning about the system's own prior outputs: reviewing the previous plan,
+the prior assessment record, and the engagement history to diagnose *why* the outcome differed
+from the forecast.
+
+The agent investigates four hypotheses:
+- **Retrieval quality** — did Foundry IQ surface the wrong content for the cert domain?
+- **Plan quality** — were hours under-allocated to the highest-leverage domain?
+- **Engagement gap** — was the learner capacity-blocked during key study weeks?
+- **Genuine skill gap** — was the domain mastery simply insufficient given available time?
+
+It uses the `reasoning` model role, `temperature=0.0`, and `foundry_iq_search` + `validate_citation`
+tools. This makes it the system's highest-deliberation step: a root-cause analysis that explains the
+prior failure and generates recovery recommendations grounded in approved content.
+
+### 4. Role-Based Specialisation
+
+Each of the 9 agents has a **single, non-overlapping responsibility** enforced by its system
+prompt, its tool list, and the workflow routing — no agent can overreach into another's domain.
+
+| Agent | Sole responsibility | What it never does |
+|---|---|---|
+| **Learner Intake** | Parse and validate learner profile | Recommend, plan, or assess |
+| **Learning Path Curator** | Map cert → cited topics (Foundry IQ + MS Learn) | Create schedule or score readiness |
+| **Study Plan Generator** | Allocate study hours via LRA | Critique, cite sources, or assess |
+| **Readiness Critic** | Find plan gaps weighted by domain leverage | Generate a plan or run assessment |
+| **Engagement Agent** | Work-aware reminder scheduling (Work IQ) | Assess readiness or create plan |
+| **Assessment Agent** | Generate grounded questions; issue booking verdict | Set schedule or surface team data |
+| **Manager Insights** | Team-level readiness + ROI; never individual scores | Make plan or run assessment |
+| **Retrospective** | Root-cause prior failures via meta-reasoning | Plan going forward |
+| **Orchestrator** | Route, coordinate, relay events | Perform any domain reasoning |
+
+The tool wiring enforces this: the Learner Intake agent has no `foundry_iq_search` tool; the
+Engagement agent has no `generate_assessment` tool; the Manager agent has no `compute_readiness_forecast`
+at the individual level. Boundaries are structural, not just instructional.
+
+---
+
+## Demo Walkthrough
+
+The following traces learner **L-1004** (Cloud Engineer, AZ-204, deadline 2026-08-15, TEAM-A — Platform Engineering) through the complete pipeline. See [docs/demo-walkthrough-detailed.md](docs/demo-walkthrough-detailed.md) for a screen-by-screen breakdown with full technical detail.
+
+---
+
+### Screen 1 — Journey Trace (idle)
+
+All 9 agent nodes are visible in the DAG before execution — pending state. The `Build My Plan` button triggers the full pipeline. Judges can inspect the dependency structure without running anything.
+
+---
+
+### Screen 2 — Journey Trace (pipeline complete)
+
+All 9 nodes turn green sequentially after clicking `Build My Plan`. Each node shows status, elapsed time, and live events in the SSE panel on the right. Engagement and Readiness Forecast ran in parallel (`asyncio.gather`).
+
+**Agents:** Orchestrator → Intake → Curator → Planner → Critic → Engagement ∥ Assessment → Manager → Retrospective *(conditional on prior failures)*
+
+The event stream is persisted — it survives page reload.
+
+---
+
+### Screen 3 — Study Plan
+
+Six-week, 25-hour plan with per-week topic allocations and domain tags. Hours are allocated using the **Largest Remainder Algorithm** so integer hours sum exactly to the total without rounding drift. The plan banner shows `Draft — pending approval` until a manager approves via `/api/plans/approve`.
+
+**Agent:** Study Plan Generator (Planner)
+
+---
+
+### Screen 4 — Plan Review (Critic objections)
+
+Objections from the Readiness Critic, each grounded in Fabric IQ:
+
+> *"fabric_iq: D{n} weight X% — minimum mastery 70%"*
+
+Ranked by **leverage** = `domain_weight × mastery_gap`. The Critic runs a bounded 2-round loop — objections → Planner rewrites → Critic re-evaluates — then exits after 2 rounds regardless. Remaining objections are logged. The tab badge shows the open count.
+
+**Agents:** Readiness Critic → Study Plan Generator
+
+---
+
+### Screen 5 — Progress
+
+Week-by-week study timeline with completion status and topic detail. A capacity warning appears when Work IQ signals detect high meeting load. Study slots are scheduled around real work patterns, not just intent.
+
+**Agent:** Engagement Agent
+
+---
+
+### Screen 6 — Exam Readiness
+
+**Readiness decision banner** (deterministic, not LLM): `NOT READY — continue prep. Below threshold. Looping back to strengthen: networking.`
+
+Three MCP tools drive this screen:
+- `compute_readiness_forecast` → calibrated P(pass) gauge (logistic regression, LOO AUC ≈ 0.80, abstains when evidence is thin), estimated score, confidence interval, minimum additional study hours
+- `compute_domain_mastery` → domain bar chart against the 75% Fabric IQ threshold line
+- `compute_service_heatmap` → granular service-level confidence: drills from domain to individual Azure service (e.g., Key Vault 17% vs RBAC 32% within security)
+
+**Trust & Safety cards** (bottom of page): Calibrated readiness (LOO AUC, Brier score, n=102), Adversarial red-team (16/16 held, 0% ASR), Content Safety (Regex fallback or live API).
+
+**Agents:** Readiness Critic + Assessment Agent feed evidence; `readiness_model.py` (logistic regression, pure numpy, seeded) computes P(pass); Fabric IQ `get_readiness_semantics` provides domain weights.
+
+---
+
+### Screen 7 — Practice Exam
+
+Select difficulty (Mixed / Easy / Medium / Hard) and click `Generate Mixed Practice Exam`. The Engagement Agent generates 20 grounded synthetic questions weighted toward the weakest domain.
+
+Each question shows:
+- `[Synthetic]` prefix — explicit AI-generated label
+- Inline Fabric IQ / MS Learn approved source citation
+- Per-question difficulty tag (Easy / Medium / Hard)
+- Domain · Service footer tag
+
+Submit is locked until all 20 questions are answered. Every claim is traceable to real Microsoft documentation.
+
+**Agent:** Engagement Agent (MS Learn MCP + Fabric IQ grounding)
+
+---
+
+### Screen 8 — Audio Briefing
+
+A two-host `Learning Podcast` (Coach / Learner) auto-targets the weakest highest-leverage domain. Labeled `grounded · cited · two-host`. The topic selector defaults to `My weakest area (recommended)` — selected from the service heatmap, not self-reported. Full Fabric IQ grounding citation is shown in the sources footer. Azure Cognitive Services TTS synthesises two distinct voices.
+
+**Agent:** Engagement Agent (script generation), Azure AI Speech (TTS synthesis)
+
+---
+
+### Screen 9 — Safety & RAI
+
+Seven RAI controls, each with implementation type:
+
+| Control | Type |
+|---|---|
+| Content Safety | Regex Fallback / Azure Content Safety API |
+| PII Redaction | Domain-aware (preserves technical cert terms) |
+| Citation Gate | Pipeline check — Curator, Assessment, Critic agents |
+| Bias Audit | Regex scan — logs, does not block |
+| Groundedness Evaluation | Azure AI Evaluation SDK LLM-as-judge |
+| HITL Approval Gate | `/api/plans/approve` — enforced at data level |
+| Foundry Agent Orchestration | All runs registered as Foundry Agent threads |
+
+**Run Evaluations** shows per-run groundedness scores and Agent Quality Rubrics for three agents (`plan_generator`, `engagement`, `manager_insights`), each with named pass/fail checks covering schema validity, HITL enforcement, calendar-write disclosure, and privacy (no individual scores in team summary).
+
+---
+
+### Screen 10 — Manager → Overview
+
+Team-level command centre for TEAM-A. Shifts from individual to aggregate without surfacing individual exam scores in the summary (enforced by M3 rubric).
+
+**ROI Cost of Delay:** `monthly_delay_cost_usd = at_risk_headcount × cert_market_value_uplift / 12` — turns learning gaps into a business-language decision.
+
+Three action columns: **Manager Actions** (prescriptive, named to learner IDs) · **Risk Areas** (team-level diagnostic patterns) · **Peer Pair Signals** (bidirectional — L-1005 can help L-1004; L-1004 can help L-1005).
+
+**Needs Action Now** panel: learners flagged by workload risk or mock performance, each with severity (`High` / `Watch`), reason tag, and 4 one-click actions (Pin intervention, Open Readiness, Open Progress, Open Mock Exam).
+
+**Certification Momentum** cards: per-learner attempt trend, latest score, verdict, exam timestamp. Learners with 0 attempts prompt the manager to create the first assessment trail.
+
+**Agent:** Manager Insights Agent; Assessment Agent (momentum data); Retrospective Agent (risk pattern input)
+
+---
+
+### Screen 11 — Manager → Approvals & Actions
+
+The HITL gate is surfaced here. Draft plans appear with plan ID, learner, cert, total hours, duration, deadline:
+- `Approve & Publish` — promotes from `draft` to published (calls `/api/plans/approve`)
+- `Review Plan` — opens full study plan before approving
+
+Approval cannot be bypassed — the plan object is `draft` at the data level, not just the UI.
+
+---
+
+### Screen 12 — Manager → Capacity & Simulator
+
+**Counterfactual Readiness Simulator** (tagged `Standout reasoning`):
+
+> *"Test a concrete manager action before committing to it. The simulator estimates workload relief, study-time gain, and target-learner exam movement."*
+
+Inputs: target learner, peer mentor, protected focus hours, reduced meeting hours, review hours/week → `Run what-if`.
+
+Output: score movement (before → after), readiness movement, at-risk movement, capacity pressure — all with explicit **Reasoning Assumptions** (the chain of logic) and a **Recommendation** stating what the intervention cannot fix and what to do next.
+
+**Capacity conflicts flagged** banner alerts when any learner exceeds 25h/wk meeting load.
+
+**Team Members — Work Context** cards: per-learner meeting hours, focus hours, capacity risk (low / medium / high), and recommended study time slots derived from Work IQ signals.
+
+**Agent:** Manager Insights Agent using Work IQ signals; `Standout reasoning` tag indicates the o-series reasoning model path is used for simulation.
+
+---
+
+### Screen 13 — Manager → Peer Learning
+
+Peer pairings matched on domain-level complementarity within same-cert cohorts:
+
+- Match type: `Same-cert mentor match` (shared AZ-204 target)
+- Focus domain chosen from learner's weakest area
+- Mentor strength (%) vs learner gap (%) shown side-by-side
+- Suggested session time derived from Work IQ availability overlap
+- `Pin session` saves the pair to the intervention queue
+
+Each card links to: `Open Mentor Readiness`, `Open Learner Progress`, `Open Next Mock Exam`.
+
+**Agent:** Manager Insights Agent (domain-mastery differentials from Assessment Agent)
 
 ---
 
@@ -123,13 +427,7 @@ chmod +x start.sh
 
 Open **http://localhost:5173** in your browser.
 
-### LLM handoff
 
-If another LLM needs to continue implementation or debugging, start with
-[docs/llm-handoff.md](docs/llm-handoff.md). It captures the recent runtime fixes, structured-output
-contracts, validation status, and the fastest known local workflow.
-
----
 
 ## What `start.sh` does
 
@@ -246,20 +544,7 @@ Three skills ship in `skills/` and are registered via `scripts/register_skills.p
 Skills are registered with the `Foundry-Features: Skills=V1Preview` header and pin the behavioral
 contract to a versioned SHA, decoupled from prompt edits.
 
-### How our Foundry deployment compares
 
-| Aspect | EnterpriseCertIQ | CertForge (reference) |
-|---|---|---|
-| Agent registration | `PromptAgentDefinition` via `register_agents_cloud_shell.py` | `agent.yaml` + Bicep IaC |
-| Provisioning | `azd up` (azure.yaml) | `azd up` (azure.yaml + Bicep) |
-| Invocation path | Responses API (`FOUNDRY_USE_RESPONSES_API=true`) in FastAPI | Standalone HTTP server port 8088 |
-| Search | VECTOR_SEMANTIC_HYBRID | Foundry IQ (default) |
-| Skills | 3 versioned Foundry Skills | — |
-| Model | `gpt-4.1` (Foundry) | `gpt-oss-120b` (Canada Central) |
-
----
-
-## API endpoints
 
 | Method | Path | Description |
 |---|---|---|
@@ -308,21 +593,6 @@ The Manager view supports a full follow-through loop:
   pinned interventions, and pinned peer sessions.
 - Peer-learning supports same-cert mentoring first, then a cross-cert study-habit fallback
   when a team has no same-cert coach available (makes TEAM-B usable when cert targets differ).
-
----
-
-## Assessment & booking verdict
-
-`POST /api/assessment/submit` returns a `booking_verdict` field:
-
-| Verdict | Condition |
-|---|---|
-| **GO** | `readiness_verdict == "ready"` AND `P(pass) ≥ 0.72` |
-| **CONDITIONAL_GO** | `P(pass) ≥ 0.50` |
-| **NOT_YET** | `P(pass) < 0.50` OR `readiness_verdict == "insufficient_evidence"` |
-
-The thresholds are calibrated against the LOO AUC 0.802 / Brier 0.183 readiness model
-(`backend/evals/readiness_model.py`). The same vocabulary is used by CertForge and CertPathAI.
 
 ---
 
@@ -426,7 +696,7 @@ enterprisecertiq/
 │   │   ├── readiness_model.py ← calibrated P(pass), booking_verdict, LOO AUC 0.802
 │   │   └── agent_rubrics.py   ← per-agent quality rubric harness
 │   ├── storage/
-│   │   └── store.py           ← JSON local / Cosmos DB abstraction
+│   │   └── store.py           ← local JSON persistence (AppStorage / LocalJSONStore)
 │   ├── models/                ← Pydantic schemas (incl. booking_verdict on AssessmentOutput)
 │   └── data/
 │       ├── synthetic/         ← learners, teams, certs, cohort data (all synthetic)
@@ -453,8 +723,7 @@ enterprisecertiq/
 └── docs/
     ├── adr/                   ← Architecture Decision Records
     ├── deployment.md          ← Azure Container Apps + azd up guide
-    ├── foundry-hosted-agents.md ← Hosted Agent registration + Skills deep-dive
-    └── work-iq-graph.md       ← Microsoft Graph Calendars.Read integration
+    └── demo-walkthrough-detailed.md ← screen-by-screen demo breakdown with agent/tool mappings
 ```
 
 ---
@@ -489,11 +758,11 @@ enterprisecertiq/
   with a 0.8 pass threshold, including booking_verdict rubric (A5). Run in CI with no credentials.
 - **PDF reports** (`backend/reports/pdf.py`) — learner readiness + manager handoff brief,
   demo-cached for instant repeat downloads.
-- **Grounded learning podcast** (`backend/audio/podcast.py`) — a NotebookLM-style
-  **two-host podcast** generated *only* from approved cert content, with the transcript +
-  citations shown for provenance. Deep-teaches the learner's weakest concept by default
-  (resolved via Fabric IQ readiness semantics); learner can pick any concept or a full exam
-  overview. Two-voice SSML → Azure AI Speech (REST); transcript works with no key.
+- **Grounded learning podcast** (`backend/audio/podcast.py`) — a **two-host grounded learning
+  podcast** generated *only* from approved cert content, with the transcript + citations shown
+  for provenance. Deep-teaches the learner's weakest concept by default (resolved via Fabric IQ
+  readiness semantics); learner can pick any concept or a full exam overview. Two-voice SSML →
+  Azure AI Speech (REST); transcript works with no key.
 - **Deterministic tier-3 fallback** (`backend/agents/fallbacks.py`) — every agent has a
   no-model deterministic builder. `AGENT_FALLBACK_MODE=force` runs the **entire pipeline
   with zero model calls** (instant, reproducible demo mode). Fallback outputs pass the same
@@ -509,11 +778,11 @@ enterprisecertiq/
 | Component | Role |
 |---|---|
 | Azure AI Foundry | 9 Hosted Agents, `gpt-4.1` model, Skills registry |
-| Azure AI Projects SDK | `AIProjectClient`, `PromptAgentDefinition`, Responses API |
+| Azure AI Projects SDK | `AIProjectClient`,  Responses API |
 | Azure Developer CLI (azd) | `azd up` one-command provisioning via `azure.yaml` |
-| Azure AI Search | VECTOR_SEMANTIC_HYBRID grounded retrieval for 3 agents |
+| Azure AI Search |  grounded retrieval  |
 | Foundry Skills | 3 versioned skills (readiness-rubric, safety-escalation, citation-policy) |
-| Foundry Local SDK | On-device model inference (dev) |
+| Foundry Local SDK | On-device model inference (dev-local mode) |
 | Microsoft Learn MCP | `microsoft_docs_search`, `microsoft_docs_fetch`, `microsoft_code_sample_search` |
 | Work IQ / Microsoft Graph | Real `Calendars.Read` (or synthetic fallback) |
 | Fabric IQ | Semantic ontology — roles, certs, weighted domains, thresholds, cohort |
@@ -521,7 +790,7 @@ enterprisecertiq/
 | Azure AI Evaluation | Groundedness LLM-as-judge (Azure path) |
 | Azure AI Speech | Two-voice TTS for the grounded audio study briefing |
 | Application Insights | OpenTelemetry traces (`ENABLE_TELEMETRY=true`) |
-| Azure Cosmos DB | Production storage (local JSON in dev) |
+| Local JSON store (for  Local Mode) | `backend/data/store/` — plans, traces, assessments, interventions |
 | FastMCP | Own MCP server exposing 10 typed tools (incl. LRA allocator, Fabric IQ semantics) |
 | ReportLab | Learner + manager PDF report generation |
 

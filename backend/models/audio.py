@@ -12,7 +12,7 @@ class PodcastTurn(BaseModel):
 
 
 class PodcastScript(BaseModel):
-    """Grounded two-host audio study briefing (NotebookLM-style, but cited).
+    """Grounded two-host audio study briefing.
 
     The script is generated only from approved certification content; `citations`
     lists the source titles/spans it was grounded in so the transcript can show

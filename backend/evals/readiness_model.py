@@ -35,8 +35,7 @@ def booking_verdict(readiness_verdict: str, pass_probability: float) -> str:
     CONDITIONAL_GO — marginal pass or solid probability (0.50 <= prob < 0.72)
     NOT_YET       — below threshold or insufficient evidence
 
-    Mirrors the naming convention used by CertForge, CertPathAI, and the
-    hackathon challenge spec so manager dashboards speak the same language.
+    Mirrors the naming convention from the hackathon challenge spec so manager dashboards speak the same language.
     """
     if readiness_verdict == "insufficient_evidence":
         return "NOT_YET"

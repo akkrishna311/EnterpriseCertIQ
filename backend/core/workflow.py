@@ -1,6 +1,6 @@
 """
-Workflow graph orchestrator — runs the 6-agent pipeline with:
-  - sequential spine (intake → curator → planner → critic loop → [engagement ∥ forecast] → assessment → manager)
+Workflow graph orchestrator — runs the 8-agent pipeline with:
+  - sequential spine (intake → curator → planner → critic loop → [engagement ∥ forecast] → assessment → manager → retrospective)
   - concurrent fan-out for curator (per cert domain)
   - parallel execution of Engagement agent + Readiness Forecast (independent inputs)
   - bounded critique loop (max 2 rounds)

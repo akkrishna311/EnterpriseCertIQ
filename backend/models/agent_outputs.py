@@ -142,7 +142,7 @@ class AssessmentOutput(BaseModel):
     Drives the workflow's pass/fail loop-back: `recommendation` decides whether
     the learner advances to the next certification or loops back into prep.
     `booking_verdict` surfaces the 3-tier exam-booking decision (GO / CONDITIONAL_GO / NOT_YET)
-    used by manager dashboards — matches the hackathon spec and CertForge naming.
+    used by manager dashboards.
     """
     learner_id: str = ""
     cert_id: str = ""

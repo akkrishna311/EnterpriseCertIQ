@@ -4,6 +4,13 @@ Provides REST + SSE endpoints for the React dashboard.
 """
 from __future__ import annotations
 
+# Load ALL vars from .env.local into os.environ before any Azure SDK is imported.
+# Pydantic BaseSettings only maps declared fields; this ensures AZURE_CLIENT_ID /
+# AZURE_CLIENT_SECRET / AZURE_TENANT_ID reach DefaultAzureCredential's EnvironmentCredential.
+from dotenv import load_dotenv as _load_dotenv
+_load_dotenv(".env.local", override=False)
+_load_dotenv(".env", override=False)
+
 import asyncio
 import json
 import logging
@@ -740,7 +747,7 @@ async def list_teams():
 
 @app.post("/api/workflow/run")
 async def run_workflow(req: RunWorkflowRequest):
-    """Start the 6-agent pipeline for a learner. Returns run_id for SSE streaming."""
+    """Start the 8-agent pipeline for a learner. Returns run_id for SSE streaming."""
     learner = _load_learner(req.learner_id)
     if req.cert_target:
         learner.cert_target = req.cert_target
