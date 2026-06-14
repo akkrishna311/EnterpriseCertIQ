@@ -27,6 +27,9 @@ opentelemetry-instrumentation-fastapi>=0.48b0
 # PDF report generation (learner readiness + manager handoff brief)
 reportlab>=4.0.0
 
+# Calibrated readiness model (pure numpy — no sklearn)
+numpy>=1.26.0
+
 # Utilities
 python-multipart==0.0.12
 sse-starlette==2.1.3

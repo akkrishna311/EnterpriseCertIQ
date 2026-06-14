@@ -194,17 +194,9 @@ def register_skill(
         print(f"  [ERROR] {e.code}: {err_body[:400]}")
         return False
 
-    # Step 2 — promote to default_version
-    default_url = _skills_url(skill_name, "default_version")
-    default_payload = json.dumps({"version_id": version_id}).encode("utf-8")
-    print(f"  PATCH {default_url}")
-    req2 = urllib.request.Request(default_url, data=default_payload, headers=_api_headers(token), method="PATCH")
-    try:
-        with urllib.request.urlopen(req2) as resp2:
-            print(f"  [OK] Promoted to default_version")
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"  [WARN] Promote failed (non-fatal): {e.code}: {body[:200]}")
+    # Note: the Skills API (v1 preview) does not expose a programmatic promote endpoint.
+    # For a fresh install, v1 is automatically the default_version.
+    # To promote a later version, use the portal: Build -> Skills -> <skill> -> Set as default.
 
     print(f"  Attach to agents: {', '.join(entry['agents'])}")
     return True
@@ -220,7 +212,7 @@ def list_skills(endpoint: str, token: str):
     try:
         with urllib.request.urlopen(req) as resp:
             body = json.loads(resp.read())
-            skills = body.get("value") or body.get("skills") or (body if isinstance(body, list) else [])
+            skills = body.get("data") or body.get("value") or body.get("skills") or (body if isinstance(body, list) else [])
             if not skills:
                 print("  (no skills found)")
             for s in skills:
@@ -273,7 +265,7 @@ def main():
     print("\n=== Summary ===")
     for name, status in results.items():
         agents = SKILL_REGISTRY.get(name, {}).get("agents", [])
-        print(f"  {status}  {name}  → attach to: {', '.join(agents)}")
+        print(f"  {status}  {name}  -> attach to: {', '.join(agents)}")
 
     if not args.dry_run:
         print("\nNext: Foundry portal → Agents → <agent name> → Skills → Add skill")

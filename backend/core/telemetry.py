@@ -77,27 +77,54 @@ def _attach_exporter(provider) -> None:
     s = get_settings()
 
     if not s.enable_telemetry:
-        # No exporter — spans created and silently dropped
         logger.debug("Telemetry: no exporter (ENABLE_TELEMETRY=false)")
         return
 
-    if s.applicationinsights_connection_string:
+    conn_str = s.applicationinsights_connection_string
+    if conn_str:
         try:
-            from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
-            from opentelemetry.sdk.trace.export import BatchSpanProcessor
-            exporter = AzureMonitorTraceExporter(
-                connection_string=s.applicationinsights_connection_string
+            from azure.monitor.opentelemetry.exporter import (
+                AzureMonitorTraceExporter,
+                AzureMonitorLogExporter,
             )
-            provider.add_span_processor(BatchSpanProcessor(exporter))
-            logger.info("Telemetry: Azure Monitor exporter enabled")
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+            from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+            from opentelemetry._logs import set_logger_provider
+            from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+            import logging as _logging
+
+            # Trace exporter — spans (workflow, agent, model, tool calls)
+            provider.add_span_processor(
+                BatchSpanProcessor(AzureMonitorTraceExporter(connection_string=conn_str))
+            )
+
+            # Log exporter — Python logger.warning/error → App Insights "traces"
+            resource = Resource.create({SERVICE_NAME: "enterprisecertiq"})
+            log_provider = LoggerProvider(resource=resource)
+            log_provider.add_log_record_processor(
+                BatchLogRecordProcessor(AzureMonitorLogExporter(connection_string=conn_str))
+            )
+            set_logger_provider(log_provider)
+
+            # Bridge Python logging (WARNING+) → OTel log provider → App Insights
+            log_handler = LoggingHandler(logger_provider=log_provider)
+            log_handler.setLevel(_logging.WARNING)
+            _logging.getLogger("backend").addHandler(log_handler)
+            _logging.getLogger("config").addHandler(log_handler)
+
+            logger.info(
+                "Telemetry: Azure Monitor exporter enabled "
+                "(traces=spans, logs=WARNING+ from backend.*)"
+            )
             return
         except ImportError:
             logger.warning(
-                "Telemetry: azure-monitor-opentelemetry not installed, "
+                "Telemetry: azure-monitor-opentelemetry-exporter not installed, "
                 "falling back to console exporter"
             )
 
-    # Console exporter (local debug or fallback)
+    # Console exporter (local debug or fallback when no App Insights conn string)
     from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
     provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
     logger.info("Telemetry: console exporter enabled (ENABLE_TELEMETRY=true)")

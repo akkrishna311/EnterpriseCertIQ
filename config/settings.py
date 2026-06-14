@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # are called via the Foundry Responses API with agent_reference so knowledge-base
     # retrieval and citation injection happen server-side. Falls back to BaseAgent on any error.
     foundry_use_responses_api: bool = False
+    # When false (default), agents are pre-registered by register_agents_cloud_shell.py and
+    # the startup registration is skipped. Set true only for auto-registration in environments
+    # where the registration script has not been run (e.g. fresh judge installs).
+    foundry_auto_register: bool = False
 
     # ── Work IQ source ────────────────────────────────────────────────
     # synthetic (default): work signals from learners.json

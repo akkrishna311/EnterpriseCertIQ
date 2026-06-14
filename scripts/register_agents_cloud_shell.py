@@ -44,6 +44,12 @@ FABRIC_KB_MCP_URL    = "https://iqsearchservicetest.search.windows.net/knowledge
 FABRIC_ONTOLOGY_CONNECTION = "EnterpriseCertIQOntology"
 FABRIC_ONTOLOGY_URL        = "https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/63fcd001-51f3-458b-bc32-920e5aa95e12/items/d0da98ba-ed92-4024-9fe9-cf6303a0d4a6/ontologyEndpoint"
 
+# ── Foundry Toolbox ───────────────────────────────────────────────────────────
+# Bundles 3 ECIQ skills; wired to every agent so skills appear in portal UI.
+# No project_connection_id needed — agent authenticates via Entra managed identity.
+TOOLBOX_NAME = "eciq-governance-toolbox"
+TOOLBOX_MCP_URL = f"{PROJECT_ENDPOINT}/toolboxes/{TOOLBOX_NAME}/mcp?api-version=v1"
+
 REPO_ROOT  = Path(__file__).parent.parent
 SKILLS_DIR = REPO_ROOT / "skills"
 
@@ -88,6 +94,7 @@ AGENTS = [
         "cert_kb": False,
         "fabric_kb": False,
         "fabric_ontology": False,
+        "toolbox": False,
     },
     {
         "name": "eciq-learner-intake",
@@ -101,6 +108,7 @@ AGENTS = [
         "cert_kb": False,
         "fabric_kb": False,
         "fabric_ontology": False,
+        "toolbox": False,
     },
     {
         "name": "eciq-learning-path-curator",
@@ -115,6 +123,7 @@ AGENTS = [
         "cert_kb": True,
         "fabric_kb": False,
         "fabric_ontology": False,
+        "toolbox": False,
     },
     {
         "name": "eciq-study-plan-generator",
@@ -129,21 +138,27 @@ AGENTS = [
         "cert_kb": False,
         "fabric_kb": True,
         "fabric_ontology": True,
+        "toolbox": False,
     },
     {
         "name": "eciq-readiness-critic",
         "description": "Reviews study plans against Fabric IQ domain weights and raises prioritised objections.",
         "instructions": _with_skills(
             "You critique study plans using semantic domain thresholds. Search the certification "
-            "knowledge base to verify skill coverage. Query Fabric IQ for domain weights and "
-            "minimum mastery requirements. Output severity-ranked objections (red/amber) with citations.",
+            "knowledge base to verify skill coverage. Query the Fabric IQ knowledge base for "
+            "domain weights and minimum mastery requirements. Output severity-ranked objections "
+            "(red/amber) with citations.",
             SKILL_READINESS_RUBRIC,
             SKILL_CITATION_POLICY,
             SKILL_SAFETY_ESCALATION,
         ),
         "cert_kb": True,
-        "fabric_kb": False,
-        "fabric_ontology": True,
+        "fabric_kb": True,   # Fabric IQ semantic data via Azure AI Search KB (not oauth endpoint)
+        # fabric_ontology removed: the Fabric workspace MCPTool triggers oauth_consent_request
+        # during server-side Responses API execution — interactive OAuth not available to the
+        # agent's managed identity. Fabric IQ domain thresholds live in the fabric-iq KB too.
+        "fabric_ontology": False,
+        "toolbox": False,
     },
     {
         "name": "eciq-engagement-agent",
@@ -157,6 +172,7 @@ AGENTS = [
         "cert_kb": False,
         "fabric_kb": False,
         "fabric_ontology": False,
+        "toolbox": False,
     },
     {
         "name": "eciq-assessment-agent",
@@ -173,6 +189,7 @@ AGENTS = [
         "cert_kb": True,
         "fabric_kb": False,
         "fabric_ontology": False,
+        "toolbox": False,
     },
     {
         "name": "eciq-manager-insights",
@@ -186,6 +203,7 @@ AGENTS = [
         "cert_kb": False,
         "fabric_kb": True,
         "fabric_ontology": True,
+        "toolbox": False,
     },
     {
         "name": "eciq-retrospective",
@@ -200,6 +218,7 @@ AGENTS = [
         "cert_kb": True,
         "fabric_kb": False,
         "fabric_ontology": False,
+        "toolbox": False,
     },
 ]
 
@@ -232,6 +251,16 @@ def _fabric_ontology_tool():
         server_url=FABRIC_ONTOLOGY_URL,
         project_connection_id=FABRIC_ONTOLOGY_CONNECTION,
         require_approval="never",
+    )
+
+def _toolbox_tool():
+    from azure.ai.projects.models import MCPTool
+    return MCPTool(
+        server_label="eciq-governance-toolbox",
+        server_url=TOOLBOX_MCP_URL,
+        require_approval="never",
+        headers={"Foundry-Features": "Toolboxes=V1Preview"},
+        # No project_connection_id — agent uses Entra managed identity to reach Toolbox
     )
 
 
@@ -282,6 +311,9 @@ def register(recreate: bool = False, dry_run: bool = False) -> None:
         if d["fabric_ontology"]:
             tools.append(_fabric_ontology_tool())
             tool_tags.append("Fabric Ontology")
+        if d.get("toolbox"):
+            tools.append(_toolbox_tool())
+            tool_tags.append("Toolbox (skills)")
 
         tag_str = "  [" + " + ".join(tool_tags) + "]" if tool_tags else ""
 
@@ -310,9 +342,12 @@ def register(recreate: bool = False, dry_run: bool = False) -> None:
     print(
         "\nDone. Open the Foundry portal to verify:\n"
         f"  https://ai.azure.com/  (project 'aipoc')\n\n"
-        "Agents with Foundry IQ KB will show the knowledge base under 'Knowledge bases'.\n"
-        "Skill governance is embedded in each agent's instructions.\n"
-        "To attach Foundry Skills via the portal: Agents → <agent> → Skills → Add skill"
+        "Each agent's Tools section will show Foundry IQ KB connections (where configured).\n"
+        "Skill governance is embedded in each agent's instructions via _with_skills().\n\n"
+        "Note: Toolbox MCPTool is NOT wired to agents at runtime (known preview limitation:\n"
+        "agent managed identity requires Foundry User RBAC to call the Toolbox consumer\n"
+        "endpoint). The Toolbox is visible in Build -> Tools as a governance registry.\n"
+        "See docs/judge-setup.md for full details and Known Limitations."
     )
 
 

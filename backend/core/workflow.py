@@ -211,6 +211,22 @@ class WorkflowOrchestrator:
                 data=data,
             )
 
+        async def grounded_with_events(agent_role: str, display_name: str, messages: list[dict]):
+            """Call a Foundry-grounded agent and emit AGENT_START/AGENT_COMPLETE so the
+            Journey Trace UI pipeline step indicator lights up, matching BaseAgent behaviour."""
+            emit(make_event(TraceEventType.AGENT_START, display_name, {
+                "model": "foundry_responses_api",
+                "tools_available": ["knowledge_base_retrieve"],
+            }))
+            result = await call_grounded_agent(agent_role, messages, run_id=run_id)
+            if result is not None:
+                emit(make_event(TraceEventType.AGENT_COMPLETE, display_name, {
+                    "content": result.content[:200],
+                    "content_length": len(result.content),
+                    "tool_calls_made": len(result.tool_calls_made or []),
+                }))
+            return result
+
         with workflow_span(run_id, learner.learner_id, learner.cert_target):
             emit(make_event(TraceEventType.WORKFLOW_START, "orchestrator", {
                 "learner_id": learner.learner_id,
@@ -259,7 +275,7 @@ class WorkflowOrchestrator:
                 )
             }]
             curator_result = (
-                await call_grounded_agent("curator", _curator_messages, run_id=run_id)
+                await grounded_with_events("curator", "curator", _curator_messages)
                 if responses_api_enabled() else None
             ) or await self.curator.run(
                 messages=_curator_messages, run_id=run_id, context=base_ctx,
@@ -317,7 +333,7 @@ class WorkflowOrchestrator:
                     )
                 }]
                 critic_result = (
-                    await call_grounded_agent("critic", _critic_messages, run_id=run_id)
+                    await grounded_with_events("critic", "readiness_critic", _critic_messages)
                     if responses_api_enabled() else None
                 ) or await self.critic.run(
                     messages=_critic_messages, run_id=run_id,
@@ -441,7 +457,7 @@ class WorkflowOrchestrator:
                     )
                 }]
                 assessment_result = (
-                    await call_grounded_agent("assessment", _assessment_messages, run_id=run_id)
+                    await grounded_with_events("assessment", "assessment", _assessment_messages)
                     if responses_api_enabled() else None
                 ) or await self.assessment.run(
                     messages=_assessment_messages, run_id=run_id,

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,52 @@ GROUNDED_AGENT_NAMES = {
     "critic":     "eciq-readiness-critic",
     "assessment": "eciq-assessment-agent",
 }
+
+# JSON format hints appended to the user message so the Foundry agent's final
+# answer is structured output, not prose.  The agent still calls knowledge_base_retrieve
+# to ground its answer before generating this JSON.
+_SCHEMA_HINTS: dict[str, str] = {
+    "curator": (
+        "\n\nIMPORTANT: Respond with valid JSON ONLY — a JSON array of topic objects. "
+        "Each object must have exactly these fields: "
+        "title (string), domain (string), hours (number 0.5-12), "
+        "priority (\"high\"|\"medium\"|\"low\"), "
+        "citations (array of objects with fields: doc_id, title, span_id, excerpt, source_url), "
+        "ms_learn_url (string). "
+        "No prose, no markdown, no explanation outside the JSON array."
+    ),
+    "critic": (
+        "\n\nIMPORTANT: Respond with valid JSON ONLY — a single JSON object with these fields: "
+        "objections (array of {objection_id, plan_element_id, "
+        "severity (\"red\"|\"amber\"), description, recommendation, citation}), "
+        "forecast (object with pass_probability, estimated_exam_score, pass_threshold, weakest_topic), "
+        "domain_mastery (object mapping domain name to mastery score 0-1), "
+        "overall_risk (\"low\"|\"medium\"|\"high\"), "
+        "ai_disclosure (string). "
+        "No prose, no markdown, no explanation outside the JSON object."
+    ),
+    "assessment": (
+        "\n\nIMPORTANT: Respond with valid JSON ONLY — a single JSON object with these fields: "
+        "learner_id (string), cert_id (string), "
+        "readiness_verdict (\"ready\"|\"not_ready\"|\"insufficient_evidence\"), "
+        "booking_verdict (\"GO\"|\"CONDITIONAL_GO\"|\"NOT_YET\"), "
+        "pass_probability (number 0-1), estimated_exam_score (integer), pass_threshold (integer), "
+        "weak_areas (string array), "
+        "sample_questions (array of {question_text, domain, citation}), "
+        "recommendation (\"advance\"|\"remediate\"|\"gather_evidence\"), "
+        "next_step (string), rationale (string), ai_disclosure (string). "
+        "No prose, no markdown, no explanation outside the JSON object."
+    ),
+}
+
+# Pydantic models for validating the JSON the Foundry agent returns
+def _get_response_schemas() -> dict[str, Any]:
+    from backend.models import CuratedTopicList, CriticOutput, AssessmentOutput
+    return {
+        "curator": CuratedTopicList,
+        "critic": CriticOutput,
+        "assessment": AssessmentOutput,
+    }
 
 
 def responses_api_enabled() -> bool:
@@ -47,43 +94,15 @@ def responses_api_enabled() -> bool:
 
 
 def _get_credential():
-    """Return a TokenCredential for AIProjectClient.
+    """Return DefaultAzureCredential for AIProjectClient.
 
-    Priority:
-    1. Service Principal (AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID) —
-       recommended for backend services; DefaultAzureCredential picks these up automatically.
-    2. API key shim — wraps AZURE_AI_API_KEY as a fake token so AIProjectClient accepts
-       it for URL construction. Works for the project-level OpenAI surface; the agent-specific
-       endpoint may require a real Entra identity (RBAC). If that call fails, the caller
-       falls back to BaseAgent.
+    The agent-specific endpoint ({project_endpoint}/agents/{name}/endpoint/...)
+    requires a real Entra Bearer token — API keys are rejected at that layer.
+    DefaultAzureCredential resolves via: SPN env vars → managed identity (Azure)
+    → az login (local dev). Secrets (API keys etc.) come from Key Vault at startup.
     """
-    import time
-    from azure.core.credentials import AccessToken
-    from config.settings import get_settings
-    import os
-    s = get_settings()
-
-    # DefaultAzureCredential automatically uses env vars AZURE_CLIENT_ID / SECRET / TENANT_ID
-    # when set — this is the recommended path for backend services without az login.
-    has_spn = all([
-        os.environ.get("AZURE_CLIENT_ID") or s.azure_ai_api_key == "",  # proxy: SPN vars present
-        os.environ.get("AZURE_CLIENT_SECRET"),
-        os.environ.get("AZURE_TENANT_ID"),
-    ])
-    if has_spn or not s.azure_ai_api_key:
-        from backend.core.azure_credentials import get_service_credential
-        return get_service_credential("foundry")
-
-    # API key shim — satisfies TokenCredential interface for URL construction.
-    # The key is forwarded as an api-key header by the underlying HTTP layer.
-    class _ApiKeyCredential:
-        def __init__(self, key: str):
-            self._key = key
-
-        def get_token(self, *scopes, **kwargs) -> AccessToken:
-            return AccessToken(self._key, int(time.time()) + 3600)
-
-    return _ApiKeyCredential(s.azure_ai_api_key)
+    from backend.core.azure_credentials import get_service_credential
+    return get_service_credential("foundry")
 
 
 def _get_openai_client(agent_name: str | None = None):
@@ -103,12 +122,65 @@ def _get_openai_client(agent_name: str | None = None):
     client = AIProjectClient(
         endpoint=s.azure_ai_project_endpoint,
         credential=_get_credential(),
+        allow_preview=True,  # required for get_openai_client(agent_name=...)
     )
-    # Responses API requires 2025-03-01-preview or later.
-    kwargs = {"api_version": "2025-03-01-preview"}
+    # When agent_name is set, get_openai_client returns a plain openai.OpenAI bound to
+    # the agent endpoint URL — api_version is baked into that URL, not a constructor arg.
+    # Without agent_name it returns AzureOpenAI where api_version would apply.
     if agent_name:
-        kwargs["agent_name"] = agent_name
-    return client.get_openai_client(**kwargs)
+        return client.get_openai_client(agent_name=agent_name)
+    return client.get_openai_client(api_version="2025-03-01-preview")
+
+
+def _extract_json_payload(content: str) -> Any:
+    """Extract and parse JSON from a text response (mirrors BaseAgent._extract_json_payload)."""
+    if not content:
+        return None
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.IGNORECASE).strip()
+    candidates = [cleaned, content.strip()]
+    match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", cleaned)
+    if match:
+        candidates.insert(0, match.group(1).strip())
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = cleaned.find(opener)
+        end = cleaned.rfind(closer)
+        if 0 <= start < end:
+            candidates.append(cleaned[start:end + 1])
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except Exception:
+            continue
+    return None
+
+
+def _parse_structured(content: str, agent_role: str):
+    """Try to parse the Foundry agent's text response as the expected Pydantic schema.
+
+    Returns (json_str, parsed_model) on success, or (content, None) on failure.
+    The parsed_model is a Pydantic instance matching the agent's response schema.
+    """
+    schemas = _get_response_schemas()
+    schema_cls = schemas.get(agent_role)
+    if schema_cls is None:
+        return content, None
+
+    payload = _extract_json_payload(content)
+    if payload is None:
+        return content, None
+
+    try:
+        parsed = schema_cls.model_validate(payload)
+        serialized = json.dumps(
+            parsed.model_dump(mode="json") if hasattr(parsed, "model_dump")
+            else parsed.root if hasattr(parsed, "root")  # RootModel
+            else payload,
+            indent=2,
+        )
+        return serialized, parsed
+    except Exception as exc:
+        logger.debug("Foundry JSON parse failed for %s: %s", agent_role, exc)
+        return content, None
 
 
 def _extract_citations(resp: Any) -> list[dict]:
@@ -127,18 +199,33 @@ def _extract_citations(resp: Any) -> list[dict]:
     return out
 
 
-def _build_responses_api_input(messages: list[dict]) -> list[dict]:
-    """Convert messages list into Responses API input format."""
+def _build_responses_api_input(messages: list[dict], schema_hint: str = "") -> list[dict]:
+    """Convert messages list into Responses API input format.
+
+    When schema_hint is provided it is appended to the last user message so the
+    Foundry agent knows to emit JSON (the agent still calls its KB tools first).
+    """
     out = []
     for m in messages:
         role = m.get("role", "user")
         content = m.get("content", "")
         if role == "system":
-            # Responses API uses 'system' role in the input list
             out.insert(0, {"role": "system", "content": content})
         elif role in ("user", "assistant"):
             out.append({"role": role, "content": content})
-    return out if out else [{"role": "user", "content": str(messages)}]
+
+    if not out:
+        out = [{"role": "user", "content": str(messages)}]
+
+    # Append JSON schema hint to the last user message so the agent formats its
+    # final answer as JSON after completing any KB retrieval tool calls.
+    if schema_hint:
+        for i in range(len(out) - 1, -1, -1):
+            if out[i].get("role") == "user":
+                out[i] = {**out[i], "content": out[i]["content"] + schema_hint}
+                break
+
+    return out
 
 
 async def call_grounded_agent(
@@ -171,7 +258,12 @@ async def call_grounded_agent(
 
         # Bind client to agent-specific endpoint so KB, instructions, and tools are used.
         openai_client = await asyncio.to_thread(_get_openai_client, agent_name)
-        api_input = _build_responses_api_input(messages)
+
+        # Inject JSON schema hint so the agent formats its final answer as structured
+        # output (after completing KB retrieval).  This mirrors BaseAgent's response_format
+        # constraint on the local path so downstream workflow.py parsing is identical.
+        schema_hint = _SCHEMA_HINTS.get(agent_role, "")
+        api_input = _build_responses_api_input(messages, schema_hint=schema_hint)
 
         def _call():
             return openai_client.responses.create(
@@ -179,7 +271,17 @@ async def call_grounded_agent(
                 input=api_input,
             )
 
-        resp = await asyncio.to_thread(_call)
+        # Explicit OTel span so every KB-grounded agent call appears as a named
+        # operation in App Insights (workflow.run → foundry_agent.call children).
+        from backend.core.telemetry import span as _otel_span
+        with _otel_span(
+            "foundry_agent.call",
+            agent=agent_name,
+            role=agent_role,
+            run_id=run_id or "?",
+            kb_grounded="true",
+        ):
+            resp = await asyncio.to_thread(_call)
 
         answer = getattr(resp, "output_text", None) or ""
         if not answer:
@@ -188,21 +290,33 @@ async def call_grounded_agent(
                     answer += getattr(block, "text", "") or ""
 
         citations = _extract_citations(resp)
-        if citations:
-            citation_lines = "\n".join(
-                f"  - {c.get('title', 'source')}: {c.get('url', '')}" for c in citations
-            )
-            answer = f"{answer}\n\nCitations (Foundry IQ):\n{citation_lines}"
 
-        logger.info(
-            "Foundry Responses API: agent=%s run=%s citations=%d chars=%d",
-            agent_name, run_id or "?", len(citations), len(answer),
-        )
+        # Try to parse the JSON response and validate against the agent's Pydantic schema.
+        # On success: content = canonical JSON, parsed = Pydantic model (same as local path).
+        # On failure: fall back to raw text + appended citation block (degraded but functional).
+        content, parsed_model = _parse_structured(answer, agent_role)
+
+        if parsed_model is not None:
+            logger.info(
+                "foundry_agent.call agent=%s run=%s citations=%d chars=%d parsed=OK",
+                agent_name, run_id or "?", len(citations), len(content),
+            )
+        else:
+            # Parsed failed — append citation block to raw text for display
+            if citations:
+                citation_lines = "\n".join(
+                    f"  - {c.get('title', 'source')}: {c.get('url', '')}" for c in citations
+                )
+                content = f"{content}\n\nCitations (Foundry IQ):\n{citation_lines}"
+            logger.warning(
+                "foundry_agent.call agent=%s run=%s citations=%d chars=%d parsed=FAILED",
+                agent_name, run_id or "?", len(citations), len(content),
+            )
 
         return AgentResult(
             agent_name=agent_role,
-            content=answer,
-            parsed=None,
+            content=content,
+            parsed=parsed_model,
             tool_calls_made=[{"tool": "foundry_responses_api", "agent": agent_name}],
             token_usage={},
         )

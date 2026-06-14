@@ -400,6 +400,19 @@ async def register_all_agents() -> list[dict]:
         return out
 
     if mode == "native":
+        # Agents are pre-registered by register_agents_cloud_shell.py with full MCPTool
+        # KB connections and Toolbox wiring. Skip auto-registration to avoid overwriting
+        # those versions with stubs. Set FOUNDRY_AUTO_REGISTER=true to override.
+        try:
+            from config.settings import get_settings as _gs
+            if not _gs().foundry_auto_register:
+                logger.info(
+                    "Foundry native mode: skipping auto-register (agents pre-registered). "
+                    "Set FOUNDRY_AUTO_REGISTER=true to enable."
+                )
+                return []
+        except Exception:
+            pass
         try:
             return await asyncio.to_thread(_register_native)
         except Exception as e:

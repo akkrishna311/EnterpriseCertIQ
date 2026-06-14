@@ -37,6 +37,7 @@ backend/data/store/
 # Azure Developer CLI
 .azure/
 eval_results.json
+eval_results_*.json
 
 # Internal strategy / competition docs — kept locally, not published
 Reasoning\ Agents\ Criteria.txt

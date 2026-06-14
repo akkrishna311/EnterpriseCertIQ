@@ -25,14 +25,10 @@ open http://localhost:5173
 ## 1. Provision Azure resources
 
 ```bash
-RG=enterprisecertiq-rg
-LOC=eastus
-az group create -n $RG -l $LOC
-
-# Container registry
-ACR=ecirq$RANDOM
-az acr create -g $RG -n $ACR --sku Basic --admin-enabled true
-az acr login -n $ACR
+RG=rg_genai
+LOC=eastus2
+az acr create -g $RG -n eciqregistry --sku Basic --location $LOC --admin-enabled true
+az acr login -n eciqregistry
 
 # Container Apps environment
 az extension add --name containerapp --upgrade
@@ -50,8 +46,8 @@ Provision (per the migration guide) as needed:
 ## 2. Build & push images
 
 ```bash
-az acr build -r $ACR -t enterprisecertiq-backend:latest .
-az acr build -r $ACR -t enterprisecertiq-frontend:latest ./frontend
+az acr build -r eciqregistry -t enterprisecertiq-backend:latest .
+az acr build -r eciqregistry -t enterprisecertiq-frontend:latest ./frontend
 ```
 
 ## 3. Deploy the backend
@@ -67,7 +63,7 @@ az containerapp create -g $RG -n eciq-backend \
             cs-key=<AZURE_CONTENT_SAFETY_KEY> appi=<APPINSIGHTS_CONN_STRING> \
   --env-vars \
     MODEL_BACKEND=azure_foundry \
-    AZURE_AI_PROJECT_ENDPOINT=https://<hub>.api.azureml.ms \
+    AZURE_AI_PROJECT_ENDPOINT=https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc \
     AZURE_AI_API_KEY=secretref:azure-key \
     AZURE_AI_MODEL_DEPLOYMENT=gpt-4o \
     AZURE_AI_REASONING_DEPLOYMENT=gpt-4o \
@@ -176,7 +172,7 @@ az containerapp job create \
   --replica-timeout 600 \
   --env-vars \
     MODEL_BACKEND=azure_foundry \
-    AZURE_AI_PROJECT_ENDPOINT=https://<hub>.api.azureml.ms \
+    AZURE_AI_PROJECT_ENDPOINT=https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc \
     AZURE_AI_MODEL_DEPLOYMENT=gpt-4o \
     AGENT_FALLBACK_MODE=auto \
     ENABLE_TELEMETRY=true \
