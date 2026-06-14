@@ -184,7 +184,9 @@ def _poll_until_active(client, version: str, timeout_s: int = 300) -> None:
                 return
             elif status == "failed":
                 error = v.get("error", {}) if isinstance(v, dict) else getattr(v, "error", {})
+                # Print full version object for diagnosis
                 print(f"\n[FAIL] Provisioning failed: {error}")
+                print(f"  Full version details: {v}")
                 print("\nCommon causes:")
                 print("  - image_pull_failed: project MI lacks AcrPull on eciqregistry")
                 print("    Fix: python scripts/deploy_hosted_agent.py --assign-acr-role")
