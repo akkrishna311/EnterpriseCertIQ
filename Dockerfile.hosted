@@ -10,8 +10,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt requirements.azure.txt ./
-RUN pip install -r requirements.azure.txt
+COPY requirements.hosted.txt ./
+RUN pip install -r requirements.hosted.txt
 # The Foundry protocol library (preview). If unavailable at build time, hosted/main.py
 # falls back to a FastAPI server implementing the same /responses + /readiness contract.
 RUN pip install azure-ai-agentserver-responses || echo "agentserver lib unavailable — using fallback"
