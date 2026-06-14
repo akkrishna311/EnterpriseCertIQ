@@ -2,7 +2,7 @@
 # MUST be x86_64/linux/amd64 (Foundry pulls from ACR over its public endpoint).
 #   docker buildx build --platform linux/amd64 -f Dockerfile.hosted \
 #       -t $ACR_LOGIN_SERVER/enterprisecertiq-hosted:latest --push .
-FROM --platform=linux/amd64 python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
