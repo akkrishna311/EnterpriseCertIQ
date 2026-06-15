@@ -3,12 +3,18 @@
 **Multi-agent enterprise certification learning system**
 *Microsoft Agents League 2026 · Reasoning Agents Track*
 
-**Highlights:** 9 Hosted Agents · Azure AI Foundry · all 3 IQ layers (Foundry IQ · Fabric IQ · Work IQ) ·
-**calibrated P(pass), LOO AUC ≈ 0.80** with INSUFFICIENT abstention · adversarial Critic → replan loop ·
-3 versioned **Foundry Skills** (behavioral governance) · **GO / CONDITIONAL_GO / NOT_YET** booking verdict ·
-**Largest Remainder Algorithm** study-hour allocation · **two-host grounded learning podcast** · what-if simulator ·
-HITL plan approval gate · App Insights tracing · Azure AI Evaluation scorers ·
-Azure Content Safety · **red-team 16/16 held (0% ASR)** · **90 tests** · `azd up` one-command provisioning.
+**Demo:** [youtu.be/SD5QvlaTbKQ](https://youtu.be/SD5QvlaTbKQ)
+
+---
+
+**Highlights**
+
+- **Platform** — 9 Hosted Agents on Azure AI Foundry · 3 versioned Foundry Skills · `azd up` one-command provisioning
+- **IQ Layers** — Foundry IQ (grounded cert retrieval) · Fabric IQ (semantic ontology + domain weights) · Work IQ (calendar & workload signals)
+- **Reasoning** — Adversarial Critic → bounded 2-round replan loop · Counterfactual Readiness Simulator · Calibrated P(pass) LOO AUC ≈ 0.80 with INSUFFICIENT abstention · Largest Remainder Algorithm study-hour allocation
+- **Learning** — Two-host grounded learning podcast · Grounded practice exam · Work-aware study scheduling · GO / CONDITIONAL_GO / NOT_YET booking verdict
+- **Manager** — HITL plan approval gate · ROI cost-of-delay · What-if simulator · Peer learning pairings
+- **Safety & Evals** — Azure Content Safety · Red-team 16/16 held (0% ASR) · 90 tests · App Insights tracing · Azure AI Evaluation scorers
 
 > **All data is synthetic.** No real employee names, email addresses, or organisational data.
 > Identifiers follow the pattern `L-1001`, `EMP-001`, `TEAM-A`.
