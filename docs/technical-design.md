@@ -158,6 +158,8 @@ EnterpriseCertIQ/
 │   └── data/
 │       ├── synthetic/                 # learners.json, teams.json, cohort_outcomes.json
 │       ├── documents/                 # Foundry IQ knowledge base (local mode)
+│       ├── eval/                      # agent_eval_dataset.jsonl, eval_dataset.jsonl
+│       ├── fabric_export/             # Fabric IQ CSV exports (domain weights, ontology)
 │       └── store/                     # Persisted plans, traces, assessments
 ├── config/
 │   ├── settings.py                    # Pydantic BaseSettings (env-driven)

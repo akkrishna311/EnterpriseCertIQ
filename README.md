@@ -560,6 +560,8 @@ Regression coverage includes:
 
 Judges can read these files directly without credentials or a running backend.
 
+For full judge setup and prerequisites, see [docs/judge-setup.md](docs/judge-setup.md).
+
 ---
 
 ## Running parts individually
@@ -601,6 +603,17 @@ python scripts/register_skills.py --list
 
 ---
 
+## Documentation
+
+| Document | Description |
+|---|---|
+| [docs/judge-setup.md](docs/judge-setup.md) | Judge onboarding — prerequisites, Azure credentials, local quick-start, known limitations |
+| [docs/technical-design.md](docs/technical-design.md) | Full technical design — architecture, agent pipeline, IQ layers, MCP tools, data models |
+| [docs/demo-walkthrough-detailed.md](docs/demo-walkthrough-detailed.md) | Screen-by-screen walkthrough with agent/tool mappings for all 13 app screens |
+| [docs/deployment.md](docs/deployment.md) | Azure deployment — Container Apps, `azd up`, Foundry Hosted Agent, Key Vault |
+
+---
+
 ## Project structure
 
 ```
@@ -614,18 +627,27 @@ enterprisecertiq/
 ├── backend/
 │   ├── main.py                ← FastAPI app + all routes
 │   ├── agents/
-│   │   └── factory.py         ← builds all 9 agents with tool executors
+│   │   ├── factory.py         ← builds all 9 agents with tool executors
+│   │   └── fallbacks.py       ← Tier-3 deterministic builders (no LLM, no network)
 │   ├── core/
 │   │   ├── agent.py           ← BaseAgent (tool-call loop, trace events)
 │   │   ├── client.py          ← model client factory
+│   │   ├── workflow.py        ← 9-agent orchestrator (Stage 5∥6a via asyncio.gather)
 │   │   ├── mcp_client.py      ← MCP HTTP client
-│   │   └── workflow.py        ← 9-agent orchestrator (Stage 5∥6a via asyncio.gather)
+│   │   ├── foundry_orchestration.py ← Foundry agent registration + sessions
+│   │   ├── foundry_grounded_agent.py ← Responses API native grounded calls
+│   │   ├── fabric_iq_agent.py ← Fabric IQ on-behalf-of agent caller
+│   │   ├── llm_cache.py       ← SHA-256 keyed LLM response cache
+│   │   ├── telemetry.py       ← OpenTelemetry spans → Application Insights
+│   │   └── azure_credentials.py ← multi-tenant Entra auth
 │   ├── mcp_server/
 │   │   └── server.py          ← FastMCP server (10 typed tools, incl. LRA allocator)
 │   ├── middleware/
-│   │   └── pipeline.py        ← PII · citation-gate · safety · bias-audit
+│   │   ├── pipeline.py        ← PII · citation-gate · safety · bias-audit
+│   │   ├── content_safety.py  ← Azure Content Safety + regex fallback
+│   │   └── red_team.py        ← jailbreak input/output screening
 │   ├── iq/
-│   │   ├── foundry_iq.py      ← grounded retrieval (local / VECTOR_SEMANTIC_HYBRID)
+│   │   ├── foundry_iq.py      ← grounded retrieval (local / vector + BM25 + semantic reranking)
 │   │   ├── work_iq.py         ← work-context signals (synthetic or MS Graph)
 │   │   └── fabric_iq.py       ← semantic ontology (roles, certs, domains, thresholds, cohort)
 │   ├── evals/
@@ -637,6 +659,8 @@ enterprisecertiq/
 │   └── data/
 │       ├── synthetic/         ← learners, teams, certs, cohort data (all synthetic)
 │       └── documents/         ← cert guide, team report (synthetic docs)
+├── hosted/
+│   └── main.py                ← Foundry Hosted Agent entry point (port 8088)
 ├── skills/
 │   ├── eciq-readiness-rubric/ ← Foundry Skill: readiness evaluation governance
 │   ├── eciq-safety-escalation/← Foundry Skill: safety escalation protocol
@@ -657,9 +681,12 @@ enterprisecertiq/
 │                                 AIDisclosureBanner
 ├── prompts/                   ← versioned agent prompts (v1.md per agent)
 └── docs/
-    ├── adr/                   ← Architecture Decision Records
+    ├── judge-setup.md         ← judge onboarding, prerequisites, known limitations
+    ├── technical-design.md    ← full technical architecture and design decisions
     ├── deployment.md          ← Azure Container Apps + azd up guide
-    └── demo-walkthrough-detailed.md ← screen-by-screen demo breakdown with agent/tool mappings
+    ├── demo-walkthrough.md    ← 13-screen demo overview
+    ├── demo-walkthrough-detailed.md ← full walkthrough with agent/tool mappings
+    └── images/                ← evidence screenshots
 ```
 
 ---
@@ -747,7 +774,7 @@ enterprisecertiq/
 | Integrate external tools, APIs, and/or MCP | ✅ | Own MCP server (10 tools) + Microsoft Learn MCP (3 tools) registered in Foundry Toolbox |
 | Integrate at least one Microsoft IQ layer | ✅ | All 3 integrated: Foundry IQ + Fabric IQ + Work IQ |
 | Synthetic data and documents only | ✅ | All data synthetic; identifiers follow `L-1001` / `EMP-001` / `TEAM-A` pattern |
-| Demoable — clear agent interactions visible | ✅ | Journey Trace DAG with live SSE events; `DEMO.md` script; `docs/demo-walkthrough.md` |
+| Demoable — clear agent interactions visible | ✅ | Journey Trace DAG with live SSE events; `docs/demo-walkthrough.md`; `docs/demo-walkthrough-detailed.md` |
 | Documentation: agent responsibilities, orchestration, tools, data sources | ✅ | What-it-does table, Reasoning Patterns section, Architecture diagram, IQ Layers, MCP Tools |
 
 ---
