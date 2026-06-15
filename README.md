@@ -144,6 +144,37 @@ on the draft to give the reviewer advisory previews at approval time.
 
 ---
 
+## MCP Tools
+
+Two MCP servers run alongside the agent pipeline. Both are registered as Foundry Toolbox connections and callable by agents at runtime.
+
+### Own MCP Server — `backend/mcp_server/server.py` (10 tools)
+
+| Tool | Used by | What it does |
+|---|---|---|
+| `parse_learner_profile` | Learner Intake | Parses and validates learner profile JSON; returns structured summary with validation warnings |
+| `foundry_iq_search` | Curator, Critic, Assessment, Retrospective | Searches Foundry IQ knowledge base; returns cited excerpts from Azure AI Search |
+| `validate_citation` | Critic, Citation Gate middleware | Verifies a claim is grounded in an approved source doc; rejects uncited claims |
+| `generate_study_plan` | Study Plan Generator | Builds capacity-aware weekly schedule using **Largest Remainder Algorithm**; always creates `draft` status |
+| `generate_assessment` | Assessment Agent | Generates domain-weighted, grounded practice questions from Foundry IQ content |
+| `compute_readiness_forecast` | Assessment Agent, Exam Readiness UI | Calibrated P(pass) via logistic regression (LOO AUC ≈ 0.80); returns CI, weakest topic, additional hours needed; abstains when evidence is thin |
+| `compute_progress_series` | Engagement Agent, Progress UI | Planned-vs-actual topic completion time series for the deviation graph |
+| `compute_domain_mastery` | Critic, Engagement, Exam Readiness UI | Per-domain mastery % vs. Fabric IQ threshold; drives the domain bar chart |
+| `compute_service_heatmap` | Engagement Agent, Exam Readiness UI | Service-level confidence within each domain (e.g. Key Vault vs RBAC within Security) |
+| `fabric_iq_semantics` | Critic, Planner, Manager Insights | Queries Fabric IQ ontology: `domain_thresholds`, `role_certification_map`, `cohort_benchmark`, `intervention_effect`, `readiness_semantics` |
+
+### Microsoft Learn MCP (3 tools)
+
+Public server (`https://learn.microsoft.com/api/mcp`) — no auth required. Registered as a Foundry Toolbox connection.
+
+| Tool | Used by | What it does |
+|---|---|---|
+| `microsoft_docs_search` | Curator, Engagement Agent | Searches official Microsoft/Azure documentation; returns cited excerpts |
+| `microsoft_docs_fetch` | Curator | Fetches a full Microsoft Learn page as markdown for deep reference |
+| `microsoft_code_sample_search` | Engagement Agent | Retrieves official code samples from Microsoft Learn for practice questions |
+
+---
+
 ## Reasoning Patterns
 
 EnterpriseCertIQ implements all four reasoning patterns described in the challenge criteria.
@@ -695,3 +726,139 @@ enterprisecertiq/
 ---
 
 *Synthetic data only. No real PII. Built for Microsoft Agents League 2026.*
+
+---
+
+## EnterpriseCertIQ — Challenge Criteria Checklist
+
+### Submission Requirements (Required)
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Multi-agent system aligned to Challenge A — Enterprise Learning | ✅ | 9-agent pipeline: Intake → Curator → Planner → Critic → Engagement ∥ Assessment → Manager → Retrospective |
+| Use Microsoft Foundry (UI or SDK) | ✅ | Azure AI Foundry SDK (`AIProjectClient`); all 9 agents registered in Foundry Agent Service |
+| Demonstrate reasoning and multi-step decision-making | ✅ | 4 named reasoning patterns (Planner–Executor, Critic/Verifier, Self-Reflection, Role-Based) documented and implemented |
+| Integrate external tools, APIs, and/or MCP | ✅ | Own MCP server (10 tools) + Microsoft Learn MCP (3 tools) registered in Foundry Toolbox |
+| Integrate at least one Microsoft IQ layer | ✅ | All 3 integrated: Foundry IQ + Fabric IQ + Work IQ |
+| Synthetic data and documents only | ✅ | All data synthetic; identifiers follow `L-1001` / `EMP-001` / `TEAM-A` pattern |
+| Demoable — clear agent interactions visible | ✅ | Journey Trace DAG with live SSE events; `DEMO.md` script; `docs/demo-walkthrough.md` |
+| Documentation: agent responsibilities, orchestration, tools, data sources | ✅ | What-it-does table, Reasoning Patterns section, Architecture diagram, IQ Layers, MCP Tools |
+
+---
+
+### Baseline Agent Flow (Challenge A)
+
+| Required Agent | Status | Evidence |
+|---|---|---|
+| Learning Path Curator | ✅ | Foundry IQ (vector + BM25 + reranking) + MS Learn MCP; cited content only |
+| Study Plan Generator | ✅ | Largest Remainder Algorithm; capacity-aware weekly schedule; Fabric IQ domain weights |
+| Engagement Agent | ✅ | Work IQ study slots (Progress tab); grounded practice exam (Practice Exam tab); two-host podcast (Audio Briefing tab) |
+| Assessment Agent | ✅ | Grounded questions from Foundry IQ; GO / CONDITIONAL_GO / NOT_YET booking verdict |
+| Manager Insights Agent | ✅ | 4 sub-tabs: Overview, Approvals & Actions, Capacity & Simulator, Peer Learning |
+| Loop-back flow (not-ready → prep) | ✅ | Bounded 2-round Critic replan loop; NOT_YET verdict routes back to planning |
+
+---
+
+### Microsoft IQ Layers
+
+| IQ Layer | Status | How Implemented |
+|---|---|---|
+| **Foundry IQ** — grounded knowledge retrieval | ✅ | Azure AI Search KB; vector + BM25 + semantic reranking; agents return cited content; `Foundry IQ Knowledge Bases.png` in Evidence |
+| **Fabric IQ** — semantic ontology / structured business understanding | ✅ | Role→cert ontology, domain weights, mastery thresholds, cohort outcomes; powers Critic leverage scoring and Manager Insights |
+| **Work IQ** — work context signals | ✅ | Synthetic signals by default; real M365 calendar via Microsoft Graph opt-in (`WORK_IQ_SOURCE=graph`) |
+
+---
+
+### Reasoning Patterns
+
+| Pattern | Status | Evidence |
+|---|---|---|
+| **Planner–Executor** | ✅ | Study Plan Generator (Planner) and Readiness Critic (Executor) strictly separated; Planner never defends, Critic never generates |
+| **Critic / Verifier** | ✅ | Bounded 2-round Critic loop; leverage-weighted objections (`domain_weight × mastery_gap`); exits after 2 rounds regardless |
+| **Self-reflection and Iteration** | ✅ | Retrospective Agent fires only on `has_prior_failures == True`; investigates 4 root-cause hypotheses at `temperature=0.0` |
+| **Role-based Specialisation** | ✅ | 9 agents with non-overlapping roles enforced by tool wiring (not just instructions) — see Role-Based Specialisation table |
+
+---
+
+### Hosted Agents
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Deployed to Foundry Agent Service | ✅ | Container image in ACR, provisioned via Foundry Agent Service; `FoundryHostedAgent.png` + container image screenshot in Evidence |
+| Entra managed identity (no embedded secrets) | ✅ | `DefaultAzureCredential`; Key Vault loads secrets at startup |
+| Dedicated agent endpoint | ✅ | Orchestrator hosted agent endpoint registered in Foundry |
+| Observability for hosted workload | ✅ | OpenTelemetry → App Insights; `AppInsights.png` in Evidence |
+
+---
+
+### MCP Integration
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Own MCP server with typed tools | ✅ | `backend/mcp_server/server.py` — 10 tools covering readiness, mastery, heatmap, Fabric IQ semantics, LRA allocation |
+| External MCP — Microsoft Learn | ✅ | `microsoft_docs_search`, `microsoft_docs_fetch`, `microsoft_code_sample_search` |
+| Both servers registered in Foundry Toolbox | ✅ | `Foundry Toolbox.png` and `Foundry Tools.png` in Evidence |
+| Tools add real measurable value | ✅ | `compute_readiness_forecast` drives P(pass) gauge; `compute_domain_mastery` drives bar chart; MS Learn grounds practice exam questions |
+
+---
+
+### Responsible AI & Guardrails
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Guardrails for inputs and outputs | ✅ | 7 RAI controls visible in Safety & RAI tab |
+| Azure Content Safety screening | ✅ | Live Content Safety API (Hate/SelfHarm/Sexual/Violence); regex fallback when offline |
+| PII redaction | ✅ | Domain-aware redaction preserving technical cert terms; `backend/middleware/pipeline.py` |
+| Bias audit | ✅ | Regex scan across output — logs flagged content, does not silently pass |
+| AI transparency disclosure | ✅ | `AIDisclosureBanner` on every artifact; `[Synthetic]` prefix on every practice question |
+| Human-in-the-loop for important decisions | ✅ | HITL plan approval gate enforced at data level — plan stays `draft` until `/api/plans/approve` is called |
+| No individual scores surfaced to manager | ✅ | M3 rubric enforces aggregate-only; unit-tested in `tests/test_manager_features.py` |
+| Foundry Skills — behavioral governance | ✅ | 3 versioned skills: `eciq-readiness-rubric`, `eciq-safety-escalation`, `eciq-citation-policy`; `Foundry Skills.png` in Evidence |
+
+---
+
+### Evaluations & Telemetry
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Agent quality rubrics | ✅ | Azure AI Evaluation SDK; rubrics for `plan_generator` (P1–P5), `engagement` (E1–E3), `manager_insights` (M1–M4) |
+| Groundedness evaluation | ✅ | `GroundednessEvaluator` LLM-as-judge via Azure AI Evaluation SDK |
+| Adversarial red-team | ✅ | 16/16 attacks held, 0% ASR; `eval/redteam.json` in repo |
+| Calibrated readiness model | ✅ | Logistic regression in `readiness_model.py`; LOO AUC ≈ 0.80, Brier 0.183, n=102; abstains on thin evidence |
+| Telemetry / observability | ✅ | OpenTelemetry → Azure Application Insights; per-agent spans; Foundry GenAI instrumentation; `AppInsights.png` in Evidence |
+| Test suite | ✅ | 90 tests across `tests/`; CI-runnable with no credentials |
+| Inspectable eval artifacts | ✅ | `eval/scorecard.json`, `eval/redteam.json` in repo; `Foundry Evals.png` in Evidence |
+
+---
+
+### Synthetic Data
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| No real customer data or PII | ✅ | All synthetic; `L-1001`, `EMP-001`, `TEAM-A` identifiers throughout |
+| README disclosure | ✅ | "All data is synthetic" notice at top of README |
+| Representative synthetic datasets | ✅ | `learners.json`, `cohort_outcomes.json`, `cert_structures.json`, `teams.json` |
+| Synthetic documents in Foundry IQ knowledge base | ✅ | `backend/data/documents/cert_guide.md`, `team_report.md`; uploaded via `upload_to_search.py` |
+| Citation gate on all generated output | ✅ | `validate_citation` MCP tool + `eciq-citation-policy` Foundry Skill enforce citations before output |
+
+---
+
+### Security
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| No `.env` files committed | ✅ | `.gitignore` covers `.env`, `.env.local`, `.env.azure` |
+| No API keys or credentials in source | ✅ | All real values replaced with placeholders; subscription ID masked |
+| Azure Key Vault for secrets | ✅ | `config/key_vault.py` loads secrets at startup and overrides env vars |
+| `.gitignore` reviewed and enforced | ✅ | Internal docs, strategy files, and non-deployment scripts excluded from repo |
+
+---
+
+### Highly Valued Extras
+
+| Extra | Status | Notes |
+|---|---|---|
+| Evaluations, telemetry, observability | ✅ | Agent rubrics + groundedness evals + App Insights traces + Foundry Evals portal |
+| Advanced reasoning patterns | ✅ | All 4 patterns implemented; Counterfactual Readiness Simulator tagged `Standout reasoning`; calibrated P(pass) with INSUFFICIENT abstention |
+| Responsible AI controls and fallbacks | ✅ | 7 RAI controls; regex fallback when Content Safety unavailable; deterministic fallback agents (`AGENT_FALLBACK_MODE=force`) |
+| Clear hosted deployment story | ✅ | `deploy_hosted_agent.py`, `Dockerfile.hosted`, `requirements.hosted.txt`, `docs/deployment.md`, `azd up` provisioning |

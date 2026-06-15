@@ -53,8 +53,7 @@ def _lra_allocate_hours(topics: list[dict], total_budget: float, min_hours: floa
     Surplus budget is distributed to the topics with the highest fractional
     remainder — the same fairness guarantee used in electoral seat allocation.
 
-    Reference: CertPathAI uses LRA to prevent domains from getting 0h due to
-    rounding when a learner has limited weekly study time.
+    Prevents domain starvation when a learner has limited weekly study time.
     """
     if not topics or total_budget <= 0:
         return topics
