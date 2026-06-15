@@ -29,20 +29,20 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 # Your Foundry project endpoint (Foundry portal → project → Settings → Project endpoint)
-PROJECT_ENDPOINT = "https://agenticaifoundrypoc.services.ai.azure.com/api/projects/aipoc"
+PROJECT_ENDPOINT = "https://<your-hub>.services.ai.azure.com/api/projects/<your-project>"
 MODEL_DEPLOYMENT = "gpt-4.1"
 
 # ── Foundry IQ Knowledge Base connections ─────────────────────────────────────
 # These are RemoteTool connections created in the portal when you added a KB to the project.
 # Connection name → MCP endpoint URL (the target of the connection)
-CERT_KB_CONNECTION   = "kb-knowledgebase820-mbs9o"
-CERT_KB_MCP_URL      = "https://iqsearchservicetest.search.windows.net/knowledgebases/knowledgebase820/mcp?api-version=2026-05-01-Preview"
+CERT_KB_CONNECTION   = "<your-cert-kb-connection-name>"
+CERT_KB_MCP_URL      = "https://<your-search>.search.windows.net/knowledgebases/<your-index>/mcp?api-version=2026-05-01-Preview"
 
-FABRIC_KB_CONNECTION = "kb-fabric-iq-enterpris-mbs9o"
-FABRIC_KB_MCP_URL    = "https://iqsearchservicetest.search.windows.net/knowledgebases/fabric-iq-enterprise-learning/mcp?api-version=2026-05-01-Preview"
+FABRIC_KB_CONNECTION = "<your-fabric-kb-connection-name>"
+FABRIC_KB_MCP_URL    = "https://<your-search>.search.windows.net/knowledgebases/<your-fabric-index>/mcp?api-version=2026-05-01-Preview"
 
 FABRIC_ONTOLOGY_CONNECTION = "EnterpriseCertIQOntology"
-FABRIC_ONTOLOGY_URL        = "https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/63fcd001-51f3-458b-bc32-920e5aa95e12/items/d0da98ba-ed92-4024-9fe9-cf6303a0d4a6/ontologyEndpoint"
+FABRIC_ONTOLOGY_URL        = "https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/<your-workspace-id>/items/<your-item-id>/ontologyEndpoint"
 
 # ── Foundry Toolbox ───────────────────────────────────────────────────────────
 # Bundles 3 ECIQ skills; wired to every agent so skills appear in portal UI.
@@ -341,7 +341,7 @@ def register(recreate: bool = False, dry_run: bool = False) -> None:
 
     print(
         "\nDone. Open the Foundry portal to verify:\n"
-        f"  https://ai.azure.com/  (project 'aipoc')\n\n"
+        f"  https://ai.azure.com/  (your project)\n\n"
         "Each agent's Tools section will show Foundry IQ KB connections (where configured).\n"
         "Skill governance is embedded in each agent's instructions via _with_skills().\n\n"
         "Note: Toolbox MCPTool is NOT wired to agents at runtime (known preview limitation:\n"

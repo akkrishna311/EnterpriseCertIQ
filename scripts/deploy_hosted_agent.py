@@ -30,12 +30,13 @@ import time
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-PROJECT_ENDPOINT = "https://agenticaihub6393130714.services.ai.azure.com/api/projects/enterprisecertiq"
+PROJECT_ENDPOINT = "https://<your-hub>.services.ai.azure.com/api/projects/<your-project>"
 AGENT_NAME       = "eciq-orchestrator"
-ACR_IMAGE        = "eciqregistry.azurecr.io/enterprisecertiq-hosted:latest"
-ACR_NAME         = "eciqregistry"
-RESOURCE_GROUP   = "rg_genai"
-SUBSCRIPTION_ID  = "8ff7c7bd-4307-430f-9775-8cfed05b3df4"
+ACR_IMAGE        = "<your-acr>.azurecr.io/enterprisecertiq-hosted:latest"
+ACR_NAME         = "<your-acr-name>"
+RESOURCE_GROUP   = "<your-resource-group>"
+SUBSCRIPTION_ID  = "<your-subscription-id>"
+WORKSPACE_NAME   = "<your-foundry-workspace-name>"
 
 # Environment variables injected into the hosted container.
 # APPLICATIONINSIGHTS_CONNECTION_STRING is injected automatically by the platform.
@@ -75,7 +76,7 @@ def _get_project_mi_object_id() -> str | None:
         result = subprocess.run(
             ["az", "identity", "show",
              "--ids", f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}"
-                      "/providers/Microsoft.MachineLearningServices/workspaces/aipoc",
+                      f"/providers/Microsoft.MachineLearningServices/workspaces/{WORKSPACE_NAME}",
              "--query", "principalId", "-o", "tsv"],
             capture_output=True, text=True, timeout=30
         )
@@ -100,7 +101,7 @@ def assign_acr_role() -> None:
         # Get the project MI principal ID
         subprocess.run(
             ["az", "ml", "workspace", "show",
-             "-g", RESOURCE_GROUP, "-n", "aipoc",
+             "-g", RESOURCE_GROUP, "-n", WORKSPACE_NAME,
              "--query", "identity.principal_id", "-o", "tsv"],
             capture_output=True, text=True
         ).stdout.strip(),
