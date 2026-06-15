@@ -3,7 +3,8 @@
 **Multi-agent enterprise certification learning system**
 *Microsoft Agents League 2026 · Reasoning Agents Track*
 
-**Demo:** [youtu.be/SD5QvlaTbKQ](https://youtu.be/SD5QvlaTbKQ)
+> ### Demo Link
+> **[youtu.be/SD5QvlaTbKQ](https://youtu.be/SD5QvlaTbKQ)**
 
 ---
 
