@@ -26,10 +26,14 @@ backend/data/store/
 .running_pids
 *.log
 
-# IDE
+# IDE / tool config
 .vscode/settings.json
 .idea/
 *.DS_Store
+.claude/
+
+# Root-level eval artifacts (not for publication)
+readiness_eval.json
 
 # Foundry Local model cache
 .foundry/
